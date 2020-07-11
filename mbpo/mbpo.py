@@ -33,6 +33,8 @@ class MBPO(tf.Module):
                     'action': tf.TensorArray(tf.float32, size=self._config.horizon),
                     'reward': tf.TensorArray(tf.float32, size=self._config.horizon),
                     'terminal': tf.TensorArray(tf.bool, size=self._config.horizon)}
+        done_rollouts = tf.zeros((tf.shape(sampled_observations)[0], self._config.horizon),
+                                 dtype=tf.bool)
         observation = sampled_observations
         for k in tf.range(self._config.horizon):
             rollouts['observation'] = rollouts['observation'].write(k, observation)
@@ -45,9 +47,20 @@ class MBPO(tf.Module):
             rollouts['next_observation'] = rollouts['next_observation'].write(k, observation)
             rollouts['reward'] = rollouts['reward'].write(k, predictions['reward'].mean())
             # TODO (yarden): understand if it's better to keep the probs (from STEVE paper).
-            rollouts['terminal'] = rollouts['terminal'].write(k, tf.greater_equal(
-                predictions['terminal'].probs, 0.5))
-        return {k: tf.transpose(v.stack(), [1, 0, 2]) for k, v in rollouts.items()}
+            terminal = tf.greater_equal(predictions['terminal'].probs, 0.5)
+            if k < self._config.horizon - 1:
+                done_rollouts[:, k + 1] = tf.logical_or(
+                    done_rollouts[:, k], terminal)
+            rollouts['terminal'] = rollouts['terminal'].write(k, terminal)
+        done_rollouts_mask = tf.logical_not(done_rollouts)
+
+        def filter_steps_after_terminal(unfiltered_rollouts, rollouts_masks):
+            return tf.map_fn(
+                lambda mask_and_rollout: tf.boolean_mask(mask_and_rollout[0], mask_and_rollout[1]),
+                (rollouts_masks, tf.transpose(unfiltered_rollouts.stack(), [1, 0, 2])),
+                dtype=unfiltered_rollouts.dtype)
+
+        return {k: filter_steps_after_terminal(v, done_rollouts_mask) for k, v in rollouts}
 
     def update_model(self):
         for _ in range(self._config.model_grad_steps):
@@ -74,18 +87,20 @@ class MBPO(tf.Module):
         parameters = []
         loss = 0.0
         with tf.GradientTape() as model_tape:
-            for i, bootstrap in enumerate(self._ensemble):
-                observations, next_observations, actions, rewards, terminals = \
-                bootstraps_batches['observations'][i], bootstraps_batches['next_observations'][i], \
-                bootstraps_batches['actions'][i], bootstraps_batches['rewards'][i], \
-                bootstraps_batches['terminals'][i]
-                predictions = bootstrap(observations, actions)
+            for i, world_model in enumerate(self._ensemble):
+                observations, target_next_observations, \
+                actions, target_rewards, target_terminals = \
+                    bootstraps_batches['observations'][i], \
+                    bootstraps_batches['next_observations'][i], \
+                    bootstraps_batches['actions'][i], bootstraps_batches['rewards'][i], \
+                    bootstraps_batches['terminals'][i]
+                predictions = world_model(observations, actions)
                 log_p_dynamics = tf.reduce_mean(
-                    predictions['next_observation'].log_prob(next_observations))
-                log_p_reward = tf.reduce_mean(predictions['reward'].log_prob(rewards))
-                log_p_terminals = tf.reduce_mean(predictions['terminal'].log_prob(terminals))
+                    predictions['next_observation'].log_prob(target_next_observations))
+                log_p_reward = tf.reduce_mean(predictions['reward'].log_prob(target_rewards))
+                log_p_terminals = tf.reduce_mean(predictions['terminal'].log_prob(target_terminals))
                 loss -= (log_p_dynamics + log_p_reward + log_p_terminals)
-                parameters += bootstrap.trainable_variables
+                parameters += world_model.trainable_variables
             grads = model_tape.gradient(loss, parameters)
             self._model_optimizer.apply_gradients(zip(grads, parameters))
         # TODO (yarden): log scalars here.

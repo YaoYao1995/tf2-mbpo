@@ -3,13 +3,14 @@ from tensorflow_addons.optimizers import AdamW
 
 import mbpo.models as models
 from mbpo.replay_buffer import ReplayBuffer
+from mbpo.utils import TrainingLogger
 
 
 class MBPO(tf.Module):
     def __init__(self, config, writer, environment_data, observation_space, action_space):
         super(MBPO, self).__init__()
         self._config = config
-        self._writer = writer
+        self._logger = TrainingLogger(writer)
         self._training_step = 0
         self._model_data = ReplayBuffer(observation_space.shape[0], action_space.shape[0])
         self._environment_data = environment_data
@@ -99,22 +100,31 @@ class MBPO(tf.Module):
                 parameters += world_model.trainable_variables
             grads = model_tape.gradient(loss, parameters)
             self._model_optimizer.apply_gradients(zip(grads, parameters))
-        # TODO (yarden): log scalars here.
+            self._logger['dynamics_' + str(i) + '_log_p'].update_state(-log_p_dynamics)
+            self._logger['rewards_' + str(i) + '_log_p'].update_state(-log_p_reward)
+            self._logger['terminals_' + str(i) + '_log_p'].update_state(-log_p_terminals)
+        self._logger['world_model_total_loss'].update_state(loss)
+        self._logger['world_model_grads'].update_state(tf.norm(grads))
 
     def update_actor_critic(self):
         for _ in range(self._config.actor_critic_grad_steps):
             batch = self._model_data.sample(self._config.actor_critic_batch_size)
-            self._actor_training_step(batch)
-            self._critic_training_step(batch)
+            actor_loss, actor_grads, pi_entropy = self._actor_training_step(batch)
+            critic_loss, critic_grads = self._critic_training_step(batch)
+            self._logger['actor_loss'].update_state(actor_loss)
+            self._logger['actor_grads'].update_state(tf.norm(actor_grads))
+            self._logger['critic_loss'].update_state(critic_loss)
+            self._logger['critic_grads'].update_state(tf.norm(critic_grads))
+            self._logger['pi_entropy'].update_state(pi_entropy)
 
     def _actor_training_step(self, batch):
         with tf.GradientTape() as actor_tape:
+            pi = self._actor(batch['observation'])
             actor_loss = -tf.reduce_mean(
-                self._critic(
-                    batch['observation'],
-                    self._actor(batch['observation']).sample()).mode())
+                self._critic(batch['observation'], pi.sample()).mode())
             grads = actor_tape.gradient(actor_loss, self._actor.trainable_variables)
             self._actor_optimizer.apply_gradients(zip(grads, self._actor.trainable_variables))
+        return actor_loss, tf.norm(grads), pi.entropy()
 
     def _critic_training_step(self, batch):
         with tf.GradientTape as critic_tape:
@@ -125,6 +135,7 @@ class MBPO(tf.Module):
             value_log_p = self._critic.log_prob(tf.stop_gradient(td))
             grads = critic_tape.gradient(-value_log_p, self._critic.trainable_variables)
             self._critic_optimizer.apply_gradients(zip(grads, self._critic.trainable_variables))
+        return value_log_p, tf.norm(grads)
 
     def _write_summary(self):
         pass
@@ -156,5 +167,5 @@ class MBPO(tf.Module):
         else:
             action = self._actor(observation).mode()
         if self.time_to_log:
-            self._write_summary()
+            self._logger.log_metrics(self._training_step)
         return action

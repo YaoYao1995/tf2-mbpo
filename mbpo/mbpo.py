@@ -1,5 +1,5 @@
-import numpy as np
 import tensorflow as tf
+from tensorflow_addons.optimizers import AdamW
 
 import mbpo.models as models
 from mbpo.replay_buffer import ReplayBuffer
@@ -18,14 +18,21 @@ class MBPO(tf.Module):
             self._config.dynamics_layers,
             self._config.units, reward_layers=2, terminal_layers=2) for _ in
             range(self._config.ensemble_size)]
-        self._model_optimizer = tf.keras.optimizers.Adam(
-            self._config.model_learning_rate, clipnorm=self._config.clip_norm, epsilon=1e-5
+        self._model_optimizer = AdamW(
+            self._config.model_learning_rate, clipnorm=self._config.clip_norm, epsilon=1e-5,
+            weight_decay=self._config.weight_decay
         )
         self._warmup_policy = lambda: action_space.sample()
         self._actor = models.Actor(action_space.shape[0], 3, self._config.units)
-        self._critic_target = models.Critic(3, self._config.units)
-        self._critic_king = models.Critic(3, self._config.units)
-        self._critic_queen = models.Critic(3, self._config.units)
+        self._actor_optimizer = AdamW(
+            self._config.actor_learning_rate, clipnorm=self._config.clip_norm, epsilon=1e-5,
+            weight_decay=self._config.weight_decay
+        )
+        self._critic = models.Critic(3, self._config.units)
+        self._critic_optimizer = AdamW(
+            self._config.critic_learning_rate, clipnorm=self._config.clip_norm, epsilon=1e-5,
+            weight_decay=self._config.weight_decay
+        )
 
     def imagine_rollouts(self, sampled_observations):
         rollouts = {'observation': tf.TensorArray(tf.float32, size=self._config.horizon),
@@ -38,7 +45,7 @@ class MBPO(tf.Module):
         observation = sampled_observations
         for k in tf.range(self._config.horizon):
             rollouts['observation'] = rollouts['observation'].write(k, observation)
-            action = self._actor(tf.stop_gradient(observation))
+            action = self._actor(tf.stop_gradient(observation)).sample()
             rollouts['action'] = rollouts['action'].write(k, action)
             bootstrap = tf.random.uniform((1,), maxval=self._config.ensemble_size, dtype=tf.int32)
             predictions = self._ensemble[bootstrap](
@@ -64,26 +71,15 @@ class MBPO(tf.Module):
 
     def update_model(self):
         for _ in range(self._config.model_grad_steps):
-            observations, next_observations, actions, rewards, terminals, infos = \
-                self._environment_data.sample(
-                    self._config.model_batch_size * self._config.ensemble_size)
-            goal_mets = np.array(list(map(lambda info: info.get('goal_met', False), infos)))
-            # We mask transitions with 'goal_met' since they are non-continuous, what extremely
-            # destabilizes the learning of p(s_t_1 | s_t, a_t)
-            masked_observations, masked_actions, masked_next_observations, masked_rewards = \
-                observations[~goal_mets, ...], actions[~goal_mets, ...], next_observations[
-                    ~goal_mets, ...], rewards[~goal_mets, ...]
-            batch = {'observations': observations,
-                     'next_observations': next_observations,
-                     'actions': actions,
-                     'rewards': rewards,
-                     'terminals': terminals}
+            batch = self._environment_data.sample(
+                self._config.model_batch_size * self._config.ensemble_size,
+                filter_goal_mets=True)
             self._model_training_step(batch)
 
     def _model_training_step(self, batch):
-        bootstraps_batches = {k: tf.split(v, [
-            tf.shape(batch)[0] // self._config.ensemble_size] * self._config.ensemble_size) for k, v
-                              in batch.items()}
+        bootstraps_batches = {k: tf.split(
+            v, [tf.shape(batch)[0] // self._config.ensemble_size] * self._config.ensemble_size)
+            for k, v in batch.items()}
         parameters = []
         loss = 0.0
         with tf.GradientTape() as model_tape:
@@ -106,8 +102,29 @@ class MBPO(tf.Module):
         # TODO (yarden): log scalars here.
 
     def update_actor_critic(self):
-        # TODO (yarde): grad clip and L2 penalty
-        pass
+        for _ in range(self._config.actor_critic_grad_steps):
+            batch = self._model_data.sample(self._config.actor_critic_batch_size)
+            self._actor_training_step(batch)
+            self._critic_training_step(batch)
+
+    def _actor_training_step(self, batch):
+        with tf.GradientTape() as actor_tape:
+            actor_loss = -tf.reduce_mean(
+                self._critic(
+                    batch['observation'],
+                    self._actor(batch['observation']).sample()).mode())
+            grads = actor_tape.gradient(actor_loss, self._actor.trainable_variables)
+            self._actor_optimizer.apply_gradients(zip(grads, self._actor.trainable_variables))
+
+    def _critic_training_step(self, batch):
+        with tf.GradientTape as critic_tape:
+            observations, actions, rewards, terminals = batch['observation'], batch['action'], \
+                                                        batch['reward'], batch['terminal']
+            td = rewards + self._config.discount * (1.0 - tf.cast(terminals, tf.float32)) * \
+                 self._critic(observations, actions).mode()
+            value_log_p = self._critic.log_prob(tf.stop_gradient(td))
+            grads = critic_tape.gradient(-value_log_p, self._critic.trainable_variables)
+            self._critic_optimizer.apply_gradients(zip(grads, self._critic.trainable_variables))
 
     def _write_summary(self):
         pass

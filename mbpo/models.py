@@ -31,13 +31,12 @@ class WorldModel(tf.Module):
     def __call__(self, observation, action):
         x = self._dynamics(tf.concat([observation, action], axis=1))
         # TODO (yarden): maybe it's better to feed the reward and terminals s, a instead of x.
-        # TODO (yarden): let the model learn the residuals (but still return the next observations)
         # The world model predicts the difference between next_observation and observation.
         return dict(next_observation=tfd.MultivariateNormalDiag(
-            loc=self._next_observation_residual_mu(x) + observation,
+            loc=self._next_observation_residual_mu(x) + tf.stop_gradient(observation),
             scale_diag=self._next_observation_stddev(x)),
-                    reward=tfd.Normal(loc=self._reward_mu(x), scale=1.0),
-                    terminal=tfd.Bernoulli(logits=self._terminal_logit(x)))
+            reward=tfd.Normal(loc=self._reward_mu(x), scale=1.0),
+            terminal=tfd.Bernoulli(logits=self._terminal_logit(x)))
 
 
 class Actor(tf.Module):
@@ -61,12 +60,15 @@ class Actor(tf.Module):
 
 
 class Critic(tf.Module):
-    def __init__(self, layers, units, activation=tf.nn.relu):
+    def __init__(self, layers, units, activation=tf.nn.relu, output_regularization=0.001):
         super().__init__()
-        # TODO (yarden): verify that the fact that there is no last dense(1) layer is a bug.
         self._action_value = tf.keras.Sequential(
             [tf.keras.layers.Dense(units=units, activation=activation) for _ in range(layers)]
         )
+        self._action_value.layers.append(
+            tf.keras.layers.Dense(units=1, activity_regularizer=tf.keras.regularizers.l2(
+                                      output_regularization)))
 
     def __call__(self, observation, action):
-        return self._action_value(tf.concat([observation, action], axis=1))
+        mu = self._action_value(tf.concat([observation, action], axis=1))
+        return tfd.Normal(loc=mu, scale=1.0)

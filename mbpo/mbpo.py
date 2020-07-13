@@ -7,13 +7,13 @@ from mbpo.utils import TrainingLogger
 
 
 class MBPO(tf.Module):
-    def __init__(self, config, writer, environment_data, observation_space, action_space):
+    def __init__(self, config, writer, observation_space, action_space):
         super(MBPO, self).__init__()
         self._config = config
         self._logger = TrainingLogger(writer)
         self._training_step = 0
         self._model_data = ReplayBuffer(observation_space.shape[0], action_space.shape[0])
-        self._environment_data = environment_data
+        self._environment_data = ReplayBuffer(observation_space.shape[0], action_space.shape[0])
         self._ensemble = [models.WorldModel(
             observation_space.shape[0],
             self._config.dynamics_layers,
@@ -137,9 +137,6 @@ class MBPO(tf.Module):
             self._critic_optimizer.apply_gradients(zip(grads, self._critic.trainable_variables))
         return value_log_p, tf.norm(grads)
 
-    def _write_summary(self):
-        pass
-
     @property
     def time_to_update_model(self):
         return self._training_step and self._training_step % self._config.steps_per_epoch == 0
@@ -151,6 +148,9 @@ class MBPO(tf.Module):
     @property
     def warm(self):
         return self._training_step >= self._config.warmup_training_steps
+
+    def observe(self, transition):
+        self._environment_data.store(transition)
 
     def __call__(self, observation, training=True):
         if training:

@@ -3,22 +3,21 @@ from tensorflow_addons.optimizers import AdamW
 
 import mbpo.models as models
 from mbpo.replay_buffer import ReplayBuffer
-from mbpo.utils import TrainingLogger
 
 
 class MBPO(tf.Module):
-    def __init__(self, config, writer, observation_space, action_space):
+    def __init__(self, config, logger, observation_space, action_space):
         super(MBPO, self).__init__()
         self._config = config
-        self._logger = TrainingLogger(writer)
+        self._logger = logger
         self._training_step = 0
         self._model_data = ReplayBuffer(observation_space.shape[0], action_space.shape[0])
         self._environment_data = ReplayBuffer(observation_space.shape[0], action_space.shape[0])
         self._ensemble = [models.WorldModel(
             observation_space.shape[0],
             self._config.dynamics_layers,
-            self._config.units, reward_layers=2, terminal_layers=2) for _ in
-            range(self._config.ensemble_size)]
+            self._config.units, reward_layers=2, terminal_layers=2)
+            for _ in range(self._config.ensemble_size)]
         self._model_optimizer = AdamW(
             self._config.model_learning_rate, clipnorm=self._config.clip_norm, epsilon=1e-5,
             weight_decay=self._config.weight_decay
@@ -49,8 +48,7 @@ class MBPO(tf.Module):
             action = self._actor(tf.stop_gradient(observation)).sample()
             rollouts['action'] = rollouts['action'].write(k, action)
             bootstrap = tf.random.uniform((1,), maxval=self._config.ensemble_size, dtype=tf.int32)
-            predictions = self._ensemble[bootstrap](
-                observation, action)
+            predictions = self._ensemble[bootstrap](observation, action)
             observation = predictions['next_observation'].sample()
             rollouts['next_observation'] = rollouts['next_observation'].write(k, observation)
             rollouts['reward'] = rollouts['reward'].write(k, predictions['reward'].mean())
@@ -98,11 +96,11 @@ class MBPO(tf.Module):
                 log_p_terminals = tf.reduce_mean(predictions['terminal'].log_prob(target_terminals))
                 loss -= (log_p_dynamics + log_p_reward + log_p_terminals)
                 parameters += world_model.trainable_variables
+                self._logger['dynamics_' + str(i) + '_log_p'].update_state(-log_p_dynamics)
+                self._logger['rewards_' + str(i) + '_log_p'].update_state(-log_p_reward)
+                self._logger['terminals_' + str(i) + '_log_p'].update_state(-log_p_terminals)
             grads = model_tape.gradient(loss, parameters)
             self._model_optimizer.apply_gradients(zip(grads, parameters))
-            self._logger['dynamics_' + str(i) + '_log_p'].update_state(-log_p_dynamics)
-            self._logger['rewards_' + str(i) + '_log_p'].update_state(-log_p_reward)
-            self._logger['terminals_' + str(i) + '_log_p'].update_state(-log_p_terminals)
         self._logger['world_model_total_loss'].update_state(loss)
         self._logger['world_model_grads'].update_state(tf.norm(grads))
 

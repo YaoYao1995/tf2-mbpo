@@ -4,7 +4,7 @@ from collections import defaultdict
 from tqdm import tqdm
 
 
-def do_episode(agent, training, environment, episode_length, pbar, render):
+def do_episode(agent, training, environment, config, pbar, render):
     observation = environment.reset()
     episode_summary = defaultdict(list)
     steps = 0
@@ -20,9 +20,9 @@ def do_episode(agent, training, environment, episode_length, pbar, render):
                            info=info))
         if render:
             episode_summary['image'].append(environment.render())
-        pbar.update(1)
-        steps += 1
-        done = terminal or steps >= episode_length
+        pbar.update(config.action_repeat)
+        steps += config.action_repeat
+        done = terminal or steps >= config.episode_length
         episode_summary['observation'].append(observation)
         episode_summary['next_observation'].append(next_observation)
         episode_summary['reward'].append(reward)
@@ -32,18 +32,18 @@ def do_episode(agent, training, environment, episode_length, pbar, render):
     return steps, episode_summary
 
 
-def interact(agent, environment, steps, episode_length, training=True, render_episodes=0):
+def interact(agent, environment, steps, config, training=True):
     pbar = tqdm(total=steps)
     steps_count = 0
     episodes = []
     while steps_count < steps:
         episode_steps, episode_summary = \
             do_episode(agent, training,
-                       environment, episode_length,
-                       pbar, len(episodes) < render_episodes)
+                       environment, config,
+                       pbar, len(episodes) < config.render_episodes)
         steps_count += episode_steps
         episodes.append(episode_summary)
-    return episodes
+    return steps, episodes
 
 
 def define_config():
@@ -51,7 +51,15 @@ def define_config():
 
 
 def main(config):
-    pass
+    steps = 0
+    agent = None
+    environment = None
+    while steps < config.total_training_steps:
+        training_steps, training_episodes_summaries = interact(
+            agent, environment, config.training_steps, config, training=True)
+        steps += training_steps
+        evaluation_steps, evaluation_episodes_summaries = interact(
+            agent, environment, config.eval_steps, config, training=False)
 
 
 if __name__ == '__main__':

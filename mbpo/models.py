@@ -60,7 +60,7 @@ class Actor(tf.Module):
 
 
 class Critic(tf.Module):
-    def __init__(self, layers, units, activation=tf.nn.relu, output_regularization=0.001):
+    def __init__(self, layers, units, activation=tf.nn.relu, output_regularization=1e-3):
         super().__init__()
         self._action_value = tf.keras.Sequential(
             [tf.keras.layers.Dense(units=units, activation=activation) for _ in range(layers)]

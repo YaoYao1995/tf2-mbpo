@@ -3,6 +3,7 @@ from collections import defaultdict
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
+from tensorboardX import SummaryWriter
 
 
 def gaussian_negative_log_likelihood(y_true, mu, var, squashed=False):
@@ -29,8 +30,8 @@ class StableTanhBijector(tfp.bijectors.Tanh):
 
 
 class TrainingLogger(object):
-    def __init__(self, writer):
-        self._writer = writer
+    def __init__(self, log_dir):
+        self._writer = SummaryWriter(log_dir)
         self._metrics = defaultdict(tf.metrics.Mean)
 
     def __getitem__(self, item):

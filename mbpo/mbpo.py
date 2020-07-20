@@ -28,7 +28,8 @@ class MBPO(tf.Module):
             self._config.actor_learning_rate, clipnorm=self._config.clip_norm, epsilon=1e-5,
             weight_decay=self._config.weight_decay
         )
-        self._critic = models.Critic(3, self._config.units)
+        self._critic = models.Critic(
+            3, self._config.units, output_regularization=self._config.critic_regulatization)
         self._critic_optimizer = AdamW(
             self._config.critic_learning_rate, clipnorm=self._config.clip_norm, epsilon=1e-5,
             weight_decay=self._config.weight_decay

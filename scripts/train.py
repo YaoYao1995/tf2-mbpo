@@ -17,7 +17,7 @@ def define_config():
     return {
         # MBPO
         'horizon': 5,
-        'update_steps': 1,
+        'update_steps': 500,
         'discount': 0.99,
         'lambda_': 0.95,
         'steps_per_update': 1000,

@@ -61,6 +61,7 @@ class MBPO(tf.Module):
     def update_model(self, batch):
         self._model_training_step(batch)
 
+    @tf.function
     def _model_training_step(self, batch):
         bootstraps_batches = {k: tf.split(
             v, [tf.shape(batch['observation'])[0] // self._config.ensemble_size] *
@@ -99,6 +100,7 @@ class MBPO(tf.Module):
         self._logger['critic_grads'].update_state(tf.norm(critic_grads))
         self._logger['pi_entropy'].update_state(pi_entropy)
 
+    @tf.function
     def _actor_training_step(self, batch):
         with tf.GradientTape() as actor_tape:
             actor_loss = 0
@@ -110,6 +112,7 @@ class MBPO(tf.Module):
             self._actor_optimizer.apply_gradients(zip(grads, self._actor.trainable_variables))
         return actor_loss, tf.linalg.global_norm(grads), pi.entropy()
 
+    @tf.function
     def _critic_training_step(self, batch):
         with tf.GradientTape() as critic_tape:
             observations, actions, rewards, terminals = batch['observation'], batch['action'], \
@@ -149,7 +152,7 @@ class MBPO(tf.Module):
         if training:
             if self.time_to_update and self.warm:
                 print("Updating world model, actor and critic.")
-                for _ in tqdm(range(self._config.update_steps)):
+                for _ in tqdm(range(self._config.update_steps), position=0, leave=True):
                     batch = self._experience.sample(self._config.model_rollouts,
                                                     filter_goal_mets=True)
                     self.update_model(batch)

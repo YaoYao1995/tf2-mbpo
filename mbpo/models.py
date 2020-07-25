@@ -56,7 +56,8 @@ class Actor(tf.Module):
             loc=self._mu(x),
             scale_diag=self._stddev(x))
         # Squash actions to [-1, 1]
-        return tfd.TransformedDistribution(multivariate_normal_diag, utils.StableTanhBijector())
+        squashed = tfd.TransformedDistribution(multivariate_normal_diag, utils.StableTanhBijector())
+        return utils.SampleDist(squashed)
 
 
 class Critic(tf.Module):

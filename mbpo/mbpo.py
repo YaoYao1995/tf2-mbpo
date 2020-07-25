@@ -125,6 +125,8 @@ class MBPO(tf.Module):
                      self._config.discount * self._critic(observations[:, t, ...],
                                                           actions[:, t, ...]).mode()
                 q_lambda = td + q_lambda * self._config.lambda_ * self._config.discount
+            # q_lambda = rewards[:, 0] + (1.0 - terminals[:, 0]) * self._config.discount * \
+            #            self._critic(observations[:, 1, ...], actions[:, 1, ...]).mode()
             q_log_p = self._critic(observations[:, 0, ...], actions[:, 0, ...]).log_prob(
                 tf.stop_gradient(q_lambda))
             grads = critic_tape.gradient(-q_log_p, self._critic.trainable_variables)
@@ -168,6 +170,6 @@ class MBPO(tf.Module):
         else:
             action = self._actor(
                 np.expand_dims(observation, axis=0).astype(np.float32)).mode()
-        if self.time_to_log:
+        if self.time_to_log and training and self.warm:
             self._logger.log_metrics(self._training_step)
         return action

@@ -40,10 +40,8 @@ class MBPO(tf.Module):
                     'action': tf.TensorArray(tf.float32, size=self._config.horizon),
                     'reward': tf.TensorArray(tf.float32, size=self._config.horizon),
                     'terminal': tf.TensorArray(tf.bool, size=self._config.horizon)}
-        done_rollouts = tf.zeros((tf.shape(sampled_observations)[0], self._config.horizon),
-                                 dtype=tf.bool)
         observation = sampled_observations
-        for k in tf.range(self._config.horizon):
+        for k in range(self._config.horizon):
             rollouts['observation'] = rollouts['observation'].write(k, observation)
             action = self._actor(tf.stop_gradient(observation)).sample()
             rollouts['action'] = rollouts['action'].write(k, action)
@@ -54,19 +52,8 @@ class MBPO(tf.Module):
             rollouts['reward'] = rollouts['reward'].write(k, predictions['reward'].mean())
             # TODO (yarden): understand if it's better to keep the probs (from STEVE paper).
             terminal = tf.greater_equal(predictions['terminal'].probs, 0.5)
-            if k < self._config.horizon - 1:
-                done_rollouts[:, k + 1] = tf.logical_or(
-                    done_rollouts[:, k], terminal)
             rollouts['terminal'] = rollouts['terminal'].write(k, terminal)
-        done_rollouts_mask = tf.logical_not(done_rollouts)
-
-        def filter_steps_after_terminal(unfiltered_rollouts, rollouts_masks):
-            return tf.map_fn(
-                lambda mask_and_rollout: tf.boolean_mask(mask_and_rollout[0], mask_and_rollout[1]),
-                (rollouts_masks, tf.transpose(unfiltered_rollouts.stack(), [1, 0, 2])),
-                dtype=unfiltered_rollouts.dtype)
-
-        return {k: filter_steps_after_terminal(v, done_rollouts_mask) for k, v in rollouts}
+        return {k: tf.transpose(v.stack(), [1, 0, 2]) for k, v in rollouts}
 
     def update_model(self, batch):
         self._model_training_step(batch)
@@ -111,9 +98,11 @@ class MBPO(tf.Module):
 
     def _actor_training_step(self, batch):
         with tf.GradientTape() as actor_tape:
-            pi = self._actor(batch['observation'])
-            actor_loss = -tf.reduce_mean(
-                self._critic(batch['observation'], pi.sample()).mode())
+            actor_loss = 0
+            for t in range(self._config.horizon):
+                pi = self._actor(batch['observation'][:, t, ...])
+                actor_loss -= tf.reduce_mean(
+                    self._critic(batch['observation'][:, t, ...], pi.sample()).mode())
             grads = actor_tape.gradient(actor_loss, self._actor.trainable_variables)
             self._actor_optimizer.apply_gradients(zip(grads, self._actor.trainable_variables))
         return actor_loss, tf.norm(grads), pi.entropy()
@@ -122,12 +111,17 @@ class MBPO(tf.Module):
         with tf.GradientTape as critic_tape:
             observations, actions, rewards, terminals = batch['observation'], batch['action'], \
                                                         batch['reward'], batch['terminal']
-            td = rewards + self._config.discount * (1.0 - tf.cast(terminals, tf.float32)) * \
-                 self._critic(observations, actions).mode()
-            value_log_p = self._critic.log_prob(tf.stop_gradient(td))
-            grads = critic_tape.gradient(-value_log_p, self._critic.trainable_variables)
+            q_lambda = self._critic(observations[:, -1, ...], actions[:, -1, ...])
+            for t in reversed(range(self._config.horizon)):
+                td = rewards[t] + \
+                     (1.0 - terminals[:, t]) * (1.0 - self._config.lambda_) * \
+                     self._config.discount * self._critic(observations[:, t, ...],
+                                                          actions[:, t, ...])
+                q_lambda = td + q_lambda * self._config.lambda_ * self._config.discount
+            q_log_p = self._critic.log_prob(tf.stop_gradient(q_lambda))
+            grads = critic_tape.gradient(-q_log_p, self._critic.trainable_variables)
             self._critic_optimizer.apply_gradients(zip(grads, self._critic.trainable_variables))
-        return value_log_p, tf.norm(grads)
+        return q_log_p, tf.norm(grads)
 
     @property
     def time_to_update(self):

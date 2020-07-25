@@ -1,3 +1,4 @@
 TODOS.md
 *.egg*
 .idea/
+__pycache__*

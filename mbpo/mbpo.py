@@ -11,8 +11,7 @@ class MBPO(tf.Module):
         self._config = config
         self._logger = logger
         self._training_step = 0
-        self._model_data = ReplayBuffer(observation_space.shape[0], action_space.shape[0])
-        self._environment_data = ReplayBuffer(observation_space.shape[0], action_space.shape[0])
+        self._experience = ReplayBuffer(observation_space.shape[0], action_space.shape[0])
         self._ensemble = [models.WorldModel(
             observation_space.shape[0],
             self._config.dynamics_layers,
@@ -69,12 +68,8 @@ class MBPO(tf.Module):
 
         return {k: filter_steps_after_terminal(v, done_rollouts_mask) for k, v in rollouts}
 
-    def update_model(self):
-        for _ in range(self._config.model_grad_steps):
-            batch = self._environment_data.sample(
-                self._config.model_batch_size * self._config.ensemble_size,
-                filter_goal_mets=True)
-            self._model_training_step(batch)
+    def update_model(self, batch):
+        self._model_training_step(batch)
 
     def _model_training_step(self, batch):
         bootstraps_batches = {k: tf.split(
@@ -105,16 +100,14 @@ class MBPO(tf.Module):
         self._logger['world_model_total_loss'].update_state(loss)
         self._logger['world_model_grads'].update_state(tf.norm(grads))
 
-    def update_actor_critic(self):
-        for _ in range(self._config.actor_critic_grad_steps):
-            batch = self._model_data.sample(self._config.actor_critic_batch_size)
-            actor_loss, actor_grads, pi_entropy = self._actor_training_step(batch)
-            critic_loss, critic_grads = self._critic_training_step(batch)
-            self._logger['actor_loss'].update_state(actor_loss)
-            self._logger['actor_grads'].update_state(tf.norm(actor_grads))
-            self._logger['critic_loss'].update_state(critic_loss)
-            self._logger['critic_grads'].update_state(tf.norm(critic_grads))
-            self._logger['pi_entropy'].update_state(pi_entropy)
+    def update_actor_critic(self, batch):
+        actor_loss, actor_grads, pi_entropy = self._actor_training_step(batch)
+        critic_loss, critic_grads = self._critic_training_step(batch)
+        self._logger['actor_loss'].update_state(actor_loss)
+        self._logger['actor_grads'].update_state(tf.norm(actor_grads))
+        self._logger['critic_loss'].update_state(critic_loss)
+        self._logger['critic_grads'].update_state(tf.norm(critic_grads))
+        self._logger['pi_entropy'].update_state(pi_entropy)
 
     def _actor_training_step(self, batch):
         with tf.GradientTape() as actor_tape:
@@ -137,8 +130,8 @@ class MBPO(tf.Module):
         return value_log_p, tf.norm(grads)
 
     @property
-    def time_to_update_model(self):
-        return self._training_step and self._training_step % self._config.steps_per_epoch == 0
+    def time_to_update(self):
+        return self._training_step and self._training_step % self._config.steps_per_update == 0
 
     @property
     def time_to_log(self):
@@ -149,17 +142,18 @@ class MBPO(tf.Module):
         return self._training_step >= self._config.warmup_training_steps
 
     def observe(self, transition):
-        self._environment_data.store(transition)
+        self._experience.store(transition)
 
     def __call__(self, observation, training=True):
         if training:
-            if self.time_to_update_model:
-                self.update_model()
+            if self.time_to_update:
+                for _ in range(self._config.update_steps):
+                    batch = self._experience.sample(self._config.model_rollouts,
+                                                    filter_goal_mets=True)
+                    self.update_model(batch)
+                    self.update_actor_critic(self.imagine_rollouts(batch['observation']))
             if self.warm:
                 action = self._actor(observation).sample()
-                sampled_observations, *_ = self._model_data.sample(self._config.model_rollouts)
-                self._model_data.store(self.imagine_rollouts(sampled_observations))
-                self.update_actor_critic()
             else:
                 action = self._warmup_policy()
             self._training_step += self._config.action_repeat

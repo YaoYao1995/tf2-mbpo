@@ -16,10 +16,9 @@ def define_config():
     return {
         # MBPO
         'horizon': 5,
-        'model_grad_steps': 500,
-        'actor_critic_grad_steps': 20,
+        'update_steps': 500,
         'discount': 0.99,
-        'steps_per_epoch': 1000,
+        'steps_per_update': 1000,
         'model_rollouts': 400,
         'warmup_training_steps': 5000,
         # MODELS
@@ -38,8 +37,8 @@ def define_config():
         'environment': 'InvertedPendulum-v2',
         'seed': 314,
         'steps_per_log': 500,
-        'training_steps': 10000,
-        'evaluation_steps': 5000,
+        'training_steps_per_epoch': 10000,
+        'evaluation_steps_per_epoch': 5000,
         'log_dir': None
     }
 
@@ -105,10 +104,10 @@ def main(config):
     steps = 0
     while steps < config.total_training_steps:
         training_steps, training_episodes_summaries = interact(
-            agent, train_env, config.training_steps, config, training=True)
+            agent, train_env, config.training_steps_per_epoch, config, training=True)
         steps += training_steps
         evaluation_steps, evaluation_episodes_summaries = interact(
-            agent, test_env, config.evaluation_steps, config, training=False)
+            agent, test_env, config.evaluation_steps_per_epoch, config, training=False)
 
 
 if __name__ == '__main__':

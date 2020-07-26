@@ -1,5 +1,9 @@
+import random
+
+import numpy as np
 import tensorflow as tf
 from tensorflow_addons.optimizers import AdamW
+from tqdm import tqdm
 
 import mbpo.models as models
 from mbpo.replay_buffer import ReplayBuffer
@@ -19,23 +23,23 @@ class MBPO(tf.Module):
             self._config.units, reward_layers=2, terminal_layers=2)
             for _ in range(self._config.ensemble_size)]
         self._model_optimizer = AdamW(
-            self._config.model_learning_rate, clipnorm=self._config.clip_norm, epsilon=1e-5,
-            weight_decay=self._config.weight_decay
+            learning_rate=self._config.model_learning_rate, clipnorm=self._config.clip_norm,
+            epsilon=1e-5, weight_decay=self._config.weight_decay
         )
         self._warmup_policy = lambda: action_space.sample()
         self._actor = models.Actor(action_space.shape[0], 3, self._config.units)
         self._actor_optimizer = AdamW(
-            self._config.actor_learning_rate, clipnorm=self._config.clip_norm, epsilon=1e-5,
-            weight_decay=self._config.weight_decay
+            learning_rate=self._config.actor_learning_rate, clipnorm=self._config.clip_norm,
+            epsilon=1e-5, weight_decay=self._config.weight_decay
         )
         self._critic = models.Critic(
-            3, self._config.units, output_regularization=self._config.critic_regulatization)
+            3, self._config.units, output_regularization=self._config.critic_regularization)
         self._critic_optimizer = AdamW(
-            self._config.critic_learning_rate, clipnorm=self._config.clip_norm, epsilon=1e-5,
-            weight_decay=self._config.weight_decay
+            learning_rate=self._config.critic_learning_rate, clipnorm=self._config.clip_norm,
+            epsilon=1e-5, weight_decay=self._config.weight_decay
         )
 
-    def imagine_rollouts(self, sampled_observations):
+    def imagine_rollouts(self, sampled_observations, bootstrap):
         rollouts = {'observation': tf.TensorArray(tf.float32, size=self._config.horizon),
                     'next_observation': tf.TensorArray(tf.float32, size=self._config.horizon),
                     'action': tf.TensorArray(tf.float32, size=self._config.horizon),
@@ -48,13 +52,12 @@ class MBPO(tf.Module):
             rollouts['observation'] = rollouts['observation'].write(k, observation)
             action = self._actor(tf.stop_gradient(observation)).sample()
             rollouts['action'] = rollouts['action'].write(k, action)
-            bootstrap = tf.random.uniform((1,), maxval=self._config.ensemble_size, dtype=tf.int32)
-            predictions = self._ensemble[bootstrap](observation, action)
+            predictions = bootstrap(observation, action)
             observation = predictions['next_observation'].sample()
             rollouts['next_observation'] = rollouts['next_observation'].write(k, observation)
             rollouts['reward'] = rollouts['reward'].write(k, predictions['reward'].mean())
             # TODO (yarden): understand if it's better to keep the probs (from STEVE paper).
-            terminal = tf.greater_equal(predictions['terminal'].probs, 0.5)
+            terminal = tf.cast(predictions['terminal'].mode(), tf.bool)
             if k < self._config.horizon - 1:
                 done_rollouts[:, k + 1] = tf.logical_or(
                     done_rollouts[:, k], terminal)
@@ -78,18 +81,18 @@ class MBPO(tf.Module):
 
     def _model_training_step(self, batch):
         bootstraps_batches = {k: tf.split(
-            v, [tf.shape(batch)[0] // self._config.ensemble_size] * self._config.ensemble_size)
-            for k, v in batch.items()}
+            v, [tf.shape(batch['observation'])[0] // self._config.ensemble_size] *
+               self._config.ensemble_size) for k, v in batch.items()}
         parameters = []
         loss = 0.0
         with tf.GradientTape() as model_tape:
             for i, world_model in enumerate(self._ensemble):
                 observations, target_next_observations, \
                 actions, target_rewards, target_terminals = \
-                    bootstraps_batches['observations'][i], \
-                    bootstraps_batches['next_observations'][i], \
-                    bootstraps_batches['actions'][i], bootstraps_batches['rewards'][i], \
-                    bootstraps_batches['terminals'][i]
+                    bootstraps_batches['observation'][i], \
+                    bootstraps_batches['next_observation'][i], \
+                    bootstraps_batches['action'][i], bootstraps_batches['reward'][i], \
+                    bootstraps_batches['terminal'][i]
                 predictions = world_model(observations, actions)
                 log_p_dynamics = tf.reduce_mean(
                     predictions['next_observation'].log_prob(target_next_observations))
@@ -103,7 +106,7 @@ class MBPO(tf.Module):
             grads = model_tape.gradient(loss, parameters)
             self._model_optimizer.apply_gradients(zip(grads, parameters))
         self._logger['world_model_total_loss'].update_state(loss)
-        self._logger['world_model_grads'].update_state(tf.norm(grads))
+        self._logger['world_model_grads'].update_state(tf.linalg.global_norm(grads))
 
     def update_actor_critic(self):
         for _ in range(self._config.actor_critic_grad_steps):
@@ -123,10 +126,10 @@ class MBPO(tf.Module):
                 self._critic(batch['observation'], pi.sample()).mode())
             grads = actor_tape.gradient(actor_loss, self._actor.trainable_variables)
             self._actor_optimizer.apply_gradients(zip(grads, self._actor.trainable_variables))
-        return actor_loss, tf.norm(grads), pi.entropy()
+        return actor_loss, tf.linalg.global_norm(grads), pi.entropy()
 
     def _critic_training_step(self, batch):
-        with tf.GradientTape as critic_tape:
+        with tf.GradientTape() as critic_tape:
             observations, actions, rewards, terminals = batch['observation'], batch['action'], \
                                                         batch['reward'], batch['terminal']
             td = rewards + self._config.discount * (1.0 - tf.cast(terminals, tf.float32)) * \
@@ -134,7 +137,7 @@ class MBPO(tf.Module):
             value_log_p = self._critic.log_prob(tf.stop_gradient(td))
             grads = critic_tape.gradient(-value_log_p, self._critic.trainable_variables)
             self._critic_optimizer.apply_gradients(zip(grads, self._critic.trainable_variables))
-        return value_log_p, tf.norm(grads)
+        return -q_log_p, tf.linalg.global_norm(grads)
 
     @property
     def time_to_update_model(self):
@@ -142,7 +145,8 @@ class MBPO(tf.Module):
 
     @property
     def time_to_log(self):
-        return self._training_step and self._training_step % self._config.steps_per_log == 0
+        return self._training_step and \
+               self._training_step % self._config.steps_per_log < self._config.action_repeat
 
     @property
     def warm(self):
@@ -164,7 +168,8 @@ class MBPO(tf.Module):
                 action = self._warmup_policy()
             self._training_step += self._config.action_repeat
         else:
-            action = self._actor(observation).mode()
-        if self.time_to_log:
+            action = self._actor(
+                np.expand_dims(observation, axis=0).astype(np.float32)).mode()
+        if self.time_to_log and training and self.warm:
             self._logger.log_metrics(self._training_step)
         return action

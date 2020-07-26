@@ -29,9 +29,11 @@ class ObservationNormalize(ObservationWrapper):
         # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford
         # 's_online_algorithm
         self._step = 0
-        self._mean = np.zeros_like(self.env.observation_space.shape)
-        self._m2 = np.ones_like(self.env.observation_space.shape)
-        self._mask = np.logical_not(
+        self._mean = np.zeros(self.env.observation_space.shape,
+                              dtype=self.env.observation_space.dtype)
+        self._m2 = np.ones(self.env.observation_space.shape,
+                           dtype=self.env.observation_space.dtype)
+        self._mask = np.logical_and(
             np.isfinite(env.observation_space.low),
             np.isfinite(env.observation_space.high)
         )
@@ -48,13 +50,13 @@ class ObservationNormalize(ObservationWrapper):
         # s^2 = m2 / (n - 1), sigma^2 = m2 / n, where s^2 is an *unbiased* estimate of the variance.
         # We devide m2 by max(step - 1, 1), so that at step = 0, we don't divide by
         # zero but just get a biased estimate of the variance.
-        return np.where(
+        return np.clip(np.where(
             self._mask,
             (self.observation_space.high - self.observation_space.low) /
             (self.env.observation_space.high - self.env.observation_space.low) *
             (observation - self.env.observation_space.low) + self.observation_space.low,
             (observation - self._mean) / (np.sqrt(self._m2 / (max(self._step - 1.0, 1.0))) + 1e-8)
-        )
+        ), -10.0, 10.0)
 
     def observation(self, observation):
         self._step += 1

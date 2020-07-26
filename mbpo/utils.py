@@ -1,18 +1,8 @@
 from collections import defaultdict
 
-import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorboardX import SummaryWriter
-
-
-def gaussian_negative_log_likelihood(y_true, mu, var, squashed=False):
-    likelihood = 0.5 * tf.reduce_sum(tf.math.log(2.0 * np.pi * var), axis=1) + \
-                 0.5 * tf.reduce_sum(tf.math.divide(tf.square(mu - y_true), var), axis=1)
-    if squashed:
-        return likelihood - tf.reduce_sum(tf.math.log(1 - tf.tanh(mu) ** 2 + 1e-6), axis=1)
-    else:
-        return likelihood
 
 
 # Following https://github.com/tensorflow/probability/issues/840 and
@@ -29,6 +19,33 @@ class StableTanhBijector(tfp.bijectors.Tanh):
         return tf.atanh(y)
 
 
+class SampleDist(object):
+    def __init__(self, dist, samples=100):
+        self._dist = dist
+        self._samples = samples
+
+    @property
+    def name(self):
+        return 'SampleDist'
+
+    def __getattr__(self, name):
+        return getattr(self._dist, name)
+
+    def mean(self):
+        samples = self._dist.sample(self._samples)
+        return tf.reduce_mean(samples, 0)
+
+    def mode(self):
+        sample = self._dist.sample(self._samples)
+        logprob = self._dist.log_prob(sample)
+        return tf.gather(sample, tf.argmax(logprob))[0]
+
+    def entropy(self):
+        sample = self._dist.sample(self._samples)
+        logprob = self.log_prob(sample)
+        return -tf.reduce_mean(logprob, 0)
+
+
 class TrainingLogger(object):
     def __init__(self, log_dir):
         self._writer = SummaryWriter(log_dir)
@@ -43,7 +60,7 @@ class TrainingLogger(object):
     def log_metrics(self, step):
         print("Training step {} summary:".format(step))
         for k, v in self._metrics.items():
-            print("{:<40} {:<.2f}".format(k, v))
+            print("{:<40} {:<.2f}".format(k, float(v.result())))
             self._writer.add_scalar(k, float(v.result()), step)
             v.reset_states()
         self._writer.flush()

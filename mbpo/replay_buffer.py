@@ -2,51 +2,39 @@ import numpy as np
 
 
 class ReplayBuffer(object):
-    def __init__(self, observation_space_dim, action_space_dim, buffer_size=1000000):
-        self._buffer_size = buffer_size
-        self._observations = np.empty(shape=(buffer_size, observation_space_dim), dtype=np.float32)
-        self._next_observations = np.empty(shape=(buffer_size, observation_space_dim),
-                                           dtype=np.float32)
-        self._actions = np.empty(shape=(buffer_size, action_space_dim), dtype=np.float32)
-        self._rewards = np.empty(shape=(buffer_size,), dtype=np.float32)
-        self._terminals = np.empty(shape=(buffer_size,), dtype=np.bool)
-        self._infos = np.empty(shape=(buffer_size,), dtype=dict)
+    def __init__(self, observation_dim, action_dim, buffer_horizon, buffer_capacity=1000000):
+        self._buffer_capacity = buffer_capacity
+        self._buffers = {
+            'observation': np.empty((buffer_capacity, buffer_horizon, observation_dim),
+                                    dtype=np.float32),
+            'next_observation': np.empty((buffer_capacity, buffer_horizon, observation_dim),
+                                         dtype=np.float32),
+            'action': np.empty((buffer_capacity, buffer_horizon, action_dim), dtype=np.float32),
+            'reward': np.empty((buffer_capacity, buffer_horizon, 1), dtype=np.float32),
+            'terminal': np.empty((buffer_capacity, buffer_horizon, 1), dtype=np.bool),
+            'info': np.empty((buffer_capacity, buffer_horizon, 1), dtype=dict)
+        }
+        self._size = 0
         self._ptr = 0
 
     def store(self, rollouts):
-        length = len(rollouts['observation'].flatten())
-        self._observations[self._ptr:self._ptr + length] = \
-            np.asarray(rollouts['observation']).flatten()
-        self._next_observations[self._ptr:self._ptr + length] = \
-            np.asarray(rollouts['next_observation']).flatten()
-        self._actions[self._ptr:self._ptr + length] = \
-            np.asarray(rollouts['action']).flatten()
-        self._rewards[self._ptr:self._ptr + length] = \
-            np.asarray(rollouts['reward']).flatten()
-        self._terminals[self._ptr:self._ptr + length] = \
-            np.asarray(rollouts['terminal']).flatten()
-        self._infos[self._ptr:self._ptr + length] = \
-            np.asarray(rollouts['info']).flatten()
-        self._ptr = (self._ptr + length) % self._buffer_size
+        assert rollouts['observation'].shape[1] == self._buffers['observation'].shape[1]
+        length = rollouts['observation'].shape[0]
+        self._size += length
+        for k, v in rollouts.items():
+            self._buffers[k][self._ptr:self._ptr + length, ...] = rollouts[k]
+        self._ptr = (self._ptr + length) % self._buffer_capacity
 
-    def sample(self, batch_size, filter_goal_mets=False):
-        indices = np.random.permutation(self._ptr)[-batch_size:]
-        observations, next_observations, actions, rewards, terminals, infos = \
-            self._observations[indices], \
-            self._next_observations[indices], \
-            self._actions[indices], \
-            self._rewards[indices], \
-            self._terminals[indices], \
-            self._infos[indices]
+    def sample(self, batch_size, horizon=1, filter_goal_mets=False):
+        indices = np.random.randint(0, self._size, batch_size)
+        out = dict()
+        for k, v in self._buffers.items():
+            samples = v[indices, -horizon:, ...]
+            samples = samples.squeeze(axis=1) if samples.shape[1] == 1 else samples
+            out[k] = samples
         if filter_goal_mets:
-            goal_mets = np.array(list(map(lambda info: info.get('goal_met', False), infos)))
+            goal_mets = np.array(list(map(lambda info: info.get('goal_met', False), out['info'])))
             # We mask transitions with 'goal_met' since they are non-continuous, what extremely
             # destabilizes the learning of p(s_t_1 | s_t, a_t)
-            observations, actions, next_observations, rewards = \
-                observations[~goal_mets, ...], actions[~goal_mets, ...], \
-                next_observations[~goal_mets, ...], rewards[~goal_mets, ...]
-        return {'observation': observations,
-                'next_observation': next_observations,
-                'action': actions,
-                'reward': rewards,
-                'terminal': terminals}
+            out = {k: v[~goal_mets, ...] for k, v in out.items()}
+        return {k: v for k, v in out.items() if k != 'info'}

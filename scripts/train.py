@@ -1,6 +1,6 @@
 import argparse
-from collections import defaultdict
 import random
+from collections import defaultdict
 
 import gym
 import numpy as np
@@ -17,11 +17,15 @@ def define_config():
     return {
         # MBPO
         'horizon': 5,
-        'update_steps': 500,
         'discount': 0.99,
         'steps_per_model_update': 1000,
         'model_rollouts': 400,
         'warmup_training_steps': 5000,
+        'model_grad_steps': 500,
+        'critic_grad_steps_per_update_step': 1,
+        'actor_critic_update_steps': 40,
+        'model_batch_size': 128,
+        'actor_critic_batch_size': 512,
         # MODELS
         'dynamics_layers': 4,
         'units': 128,
@@ -35,6 +39,7 @@ def define_config():
         # TRAINING
         'total_training_steps': 100000,
         'action_repeat': 3,
+        'filter_goal_mets': False,
         'environment': 'InvertedPendulum-v2',
         'seed': 314,
         'steps_per_log': 1000,
@@ -54,12 +59,12 @@ def do_episode(agent, training, environment, config, pbar, render):
     while not done:
         action = agent(observation, training)
         next_observation, reward, terminal, info = environment.step(action)
-        agent.observe(dict(observation=observation,
-                           next_observation=next_observation,
-                           action=action,
-                           reward=reward,
-                           terminal=terminal,
-                           info=info))
+        agent.observe(dict(observation=observation.astype(np.float32)[np.newaxis, np.newaxis],
+                           next_observation=next_observation.astype(np.float32)[np.newaxis, np.newaxis],
+                           action=action.astype(np.float32)[np.newaxis, np.newaxis],
+                           reward=np.array([[reward]], dtype=np.float32),
+                           terminal=np.array([[terminal]], dtype=np.bool),
+                           info=np.array([[info]], dtype=dict)))
         if render:
             episode_summary['image'].append(environment.render(mode='rgb_array'))
         pbar.update(config.action_repeat)

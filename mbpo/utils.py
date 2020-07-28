@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorboardX import SummaryWriter
@@ -57,6 +58,11 @@ class TrainingLogger(object):
     def __setitem__(self, key, value):
         self._metrics[key] = value
 
+    def log_evaluation_summary(self, summary, step):
+        for k, v in summary:
+            self._writer.add_scalar(k, float(v), step)
+        self._writer.flush()
+
     def log_metrics(self, step):
         print("Training step {} summary:".format(step))
         for k, v in self._metrics.items():
@@ -65,5 +71,7 @@ class TrainingLogger(object):
             v.reset_states()
         self._writer.flush()
 
-    def log_video(self):
-        pass
+    def log_video(self, images, step):
+        video = np.transpose(images, [0, 3, 1, 2])
+        self._writer.add_video('Evaluation policy', video, step)
+        self._writer.flush()

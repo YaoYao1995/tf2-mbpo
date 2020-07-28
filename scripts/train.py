@@ -112,13 +112,22 @@ def main(config):
     agent = MBPO(config, logger, train_env.observation_space, train_env.action_space)
     steps = 0
     while steps < config.total_training_steps:
-        print("Training epoch.")
+        print("Performing a training epoch.")
         training_steps, training_episodes_summaries = interact(
             agent, train_env, config.training_steps_per_epoch, config, training=True)
         steps += training_steps
         print("Evaluating.")
         evaluation_steps, evaluation_episodes_summaries = interact(
             agent, test_env, config.evaluation_steps_per_epoch, config, training=False)
+        eval_summary = dict(eval_score=np.asarray([
+            sum(episode['reward']).mean()
+            for episode in evaluation_episodes_summaries]
+        ))
+        logger.log_evaluation_summary(eval_summary)
+        for episode in evaluation_episodes_summaries:
+            video = episode.get('image', None)
+            if video:
+                logger.log_video(video)
 
 
 if __name__ == '__main__':

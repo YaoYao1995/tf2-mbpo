@@ -72,6 +72,6 @@ class TrainingLogger(object):
         self._writer.flush()
 
     def log_video(self, images, step):
-        video = np.transpose(images, [0, 3, 1, 2])
+        video = np.expand_dims(np.transpose(images, [0, 3, 1, 2]), axis=0)
         self._writer.add_video('Evaluation policy', video, step)
         self._writer.flush()

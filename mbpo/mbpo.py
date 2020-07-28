@@ -41,6 +41,7 @@ class MBPO(tf.Module):
             epsilon=1e-5, weight_decay=self._config.weight_decay
         )
 
+    @tf.function
     def imagine_rollouts(self, sampled_observations, bootstrap):
         rollouts = {'observation': tf.TensorArray(tf.float32, size=self._config.horizon),
                     'next_observation': tf.TensorArray(tf.float32, size=self._config.horizon),
@@ -82,12 +83,14 @@ class MBPO(tf.Module):
 
     def update_model(self):
         print("Updating model.")
-        for _ in tqdm(range(self._config.model_grad_steps), position=0, leave=True):
+        for _ in range(self._config.model_grad_steps):
             batch = self._environment_data.sample(
                 self._config.model_batch_size * self._config.ensemble_size,
                 filter_goal_mets=self._config.filter_goal_mets)
             self._model_grad_step(batch)
+        print("Model update done.")
 
+    @tf.function
     def _model_grad_step(self, batch):
         bootstraps_batches = {k: tf.split(
             v, [tf.shape(batch['observation'])[0] // self._config.ensemble_size] *
@@ -118,27 +121,36 @@ class MBPO(tf.Module):
         self._logger['world_model_grads'].update_state(tf.linalg.global_norm(grads))
 
     def update_actor_critic(self):
-        print("Updating actor-critic.")
-        for _ in tqdm(range(self._config.actor_critic_update_steps), position=0, leave=True):
+        for _ in range(self._config.actor_critic_update_steps):
             batch = self._model_data.sample(self._config.actor_critic_batch_size)
-            # TODO (yarden): can speed this for-loop up by putting it inside tf.function
-            for i in range(self._config.critic_grad_steps_per_update_step):
-                if i % 10 == 0:
-                    target_td = batch['reward'] + self._config.discount * \
-                                (1.0 - batch['terminal']) * self._critic(
-                        batch['next_observation'],
-                        self._actor(batch['next_observation']).sample()).mode()
-                critic_loss, critic_grads = self._critic_grad_step(
-                    batch['observation'],
-                    batch['action'],
-                    target_td)
-                self._logger['critic_loss'].update_state(critic_loss)
-                self._logger['critic_grads'].update_state(tf.norm(critic_grads))
-            actor_loss, actor_grads, pi_entropy = self._actor_grad_step(batch['observation'])
+            self._update_critic(
+                tf.constant(batch['observation'], dtype=tf.float32),
+                tf.constant(batch['next_observation'], dtype=tf.float32),
+                tf.constant(batch['action'], dtype=tf.float32),
+                tf.constant(batch['reward'], dtype=tf.float32),
+                tf.constant(batch['terminal'], dtype=tf.float32)
+            )
+            actor_loss, actor_grads, pi_entropy = self._actor_grad_step(
+                tf.constant(batch['observation']))
             self._logger['actor_loss'].update_state(actor_loss)
             self._logger['actor_grads'].update_state(tf.norm(actor_grads))
             self._logger['pi_entropy'].update_state(pi_entropy)
 
+    @tf.function
+    def _update_critic(self, observation, next_observation, action, reward, terminal):
+        for i in range(self._config.critic_grad_steps_per_update_step):
+            if i % 3 == 0:
+                target_td = reward + self._config.discount * (1.0 - terminal) * \
+                            self._critic(next_observation,
+                                         self._actor(next_observation).sample()).mode()
+            critic_loss, critic_grads = self._critic_grad_step(
+                observation,
+                action,
+                target_td)
+            self._logger['critic_loss'].update_state(critic_loss)
+            self._logger['critic_grads'].update_state(tf.norm(critic_grads))
+
+    @tf.function
     def _actor_grad_step(self, observation):
         with tf.GradientTape() as actor_tape:
             pi = self._actor(observation)
@@ -148,6 +160,7 @@ class MBPO(tf.Module):
             self._actor_optimizer.apply_gradients(zip(grads, self._actor.trainable_variables))
         return actor_loss, tf.linalg.global_norm(grads), pi.entropy()
 
+    @tf.function
     def _critic_grad_step(self, observation, action, target_td):
         with tf.GradientTape() as critic_tape:
             q_log_p = self._critic(observation, action).log_prob(tf.stop_gradient(target_td))
@@ -182,7 +195,7 @@ class MBPO(tf.Module):
                     np.expand_dims(observation, axis=0).astype(np.float32)).sample().numpy()
                 real_transitions = self._environment_data.sample(self._config.model_rollouts)
                 self._model_data.store(self.imagine_rollouts(
-                    real_transitions['observation'],
+                    tf.constant(real_transitions['observation']),
                     random.choice(self._ensemble)))
                 self.update_actor_critic()
             else:

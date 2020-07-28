@@ -20,7 +20,7 @@ class ReplayBuffer(object):
     def store(self, rollouts):
         assert rollouts['observation'].shape[1] == self._buffers['observation'].shape[1]
         length = rollouts['observation'].shape[0]
-        self._size += min(length, self._buffer_capacity)
+        self._size = min(self._size + length, self._buffer_capacity)
         for k, v in rollouts.items():
             self._buffers[k][self._ptr:self._ptr + length, ...] = rollouts[k]
         self._ptr = (self._ptr + length) % self._buffer_capacity

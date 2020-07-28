@@ -151,6 +151,14 @@ class MBPO(tf.Module):
             self._logger['critic_grads'].update_state(tf.norm(critic_grads))
 
     @tf.function
+    def _critic_grad_step(self, observation, action, target_td):
+        with tf.GradientTape() as critic_tape:
+            q_log_p = self._critic(observation, action).log_prob(tf.stop_gradient(target_td))
+            grads = critic_tape.gradient(-q_log_p, self._critic.trainable_variables)
+            self._critic_optimizer.apply_gradients(zip(grads, self._critic.trainable_variables))
+        return -q_log_p, tf.linalg.global_norm(grads)
+
+    @tf.function
     def _actor_grad_step(self, observation):
         with tf.GradientTape() as actor_tape:
             pi = self._actor(observation)
@@ -159,14 +167,6 @@ class MBPO(tf.Module):
             grads = actor_tape.gradient(actor_loss, self._actor.trainable_variables)
             self._actor_optimizer.apply_gradients(zip(grads, self._actor.trainable_variables))
         return actor_loss, tf.linalg.global_norm(grads), pi.entropy()
-
-    @tf.function
-    def _critic_grad_step(self, observation, action, target_td):
-        with tf.GradientTape() as critic_tape:
-            q_log_p = self._critic(observation, action).log_prob(tf.stop_gradient(target_td))
-            grads = critic_tape.gradient(-q_log_p, self._critic.trainable_variables)
-            self._critic_optimizer.apply_gradients(zip(grads, self._critic.trainable_variables))
-        return -q_log_p, tf.linalg.global_norm(grads)
 
     @property
     def time_to_update_model(self):

@@ -25,19 +25,19 @@ class MBPO(tf.Module):
             self._config.units, reward_layers=2, terminal_layers=2)
             for _ in range(self._config.ensemble_size)]
         self._model_optimizer = AdamW(
-            learning_rate=self._config.model_learning_rate, clipnorm=self._config.clip_norm,
+            learning_rate=self._config.model_learning_rate, clipnorm=self._config.grad_clip_norm,
             epsilon=1e-5, weight_decay=self._config.weight_decay
         )
         self._warmup_policy = lambda: action_space.sample()
         self._actor = models.Actor(action_space.shape[0], 3, self._config.units)
         self._actor_optimizer = AdamW(
-            learning_rate=self._config.actor_learning_rate, clipnorm=self._config.clip_norm,
+            learning_rate=self._config.actor_learning_rate, clipnorm=self._config.grad_clip_norm,
             epsilon=1e-5, weight_decay=self._config.weight_decay
         )
         self._critic = models.Critic(
             3, self._config.units, output_regularization=self._config.critic_regularization)
         self._critic_optimizer = AdamW(
-            learning_rate=self._config.critic_learning_rate, clipnorm=self._config.clip_norm,
+            learning_rate=self._config.critic_learning_rate, clipnorm=self._config.grad_clip_norm,
             epsilon=1e-5, weight_decay=self._config.weight_decay
         )
 

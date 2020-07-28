@@ -33,7 +33,7 @@ def define_config():
         'model_learning_rate': 2.5e-4,
         'actor_learning_rate': 3e-5,
         'critic_learning_rate': 3e-5,
-        'clip_norm': 5.0,
+        'grad_clip_norm': 5.0,
         'weight_decay': 1e-5,
         'critic_regularization': 1e-3,
         # TRAINING
@@ -42,7 +42,7 @@ def define_config():
         'filter_goal_mets': False,
         'environment': 'InvertedPendulum-v2',
         'seed': 314,
-        'steps_per_log': 1000,
+        'steps_per_log': 500,
         'episode_length': 1000,
         'training_steps_per_epoch': 10000,
         'evaluation_steps_per_epoch': 5000,
@@ -120,14 +120,13 @@ def main(config):
         evaluation_steps, evaluation_episodes_summaries = interact(
             agent, test_env, config.evaluation_steps_per_epoch, config, training=False)
         eval_summary = dict(eval_score=np.asarray([
-            sum(episode['reward']).mean()
-            for episode in evaluation_episodes_summaries]
-        ))
-        logger.log_evaluation_summary(eval_summary)
+            sum(episode['reward'])
+            for episode in evaluation_episodes_summaries]).mean())
+        logger.log_evaluation_summary(eval_summary, training_steps)
         for episode in evaluation_episodes_summaries:
             video = episode.get('image', None)
             if video:
-                logger.log_video(video)
+                logger.log_video(video, training_steps)
 
 
 if __name__ == '__main__':

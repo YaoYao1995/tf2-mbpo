@@ -59,7 +59,7 @@ class TrainingLogger(object):
         self._metrics[key] = value
 
     def log_evaluation_summary(self, summary, step):
-        for k, v in summary:
+        for k, v in summary.items():
             self._writer.add_scalar(k, float(v), step)
         self._writer.flush()
 

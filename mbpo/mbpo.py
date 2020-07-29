@@ -3,7 +3,6 @@ import random
 import numpy as np
 import tensorflow as tf
 from tensorflow_addons.optimizers import AdamW
-from tqdm import tqdm
 
 import mbpo.models as models
 from mbpo.replay_buffer import ReplayBuffer
@@ -42,7 +41,7 @@ class MBPO(tf.Module):
         )
 
     @tf.function
-    def imagine_rollouts(self, sampled_observations, bootstrap):
+    def imagine_rollouts(self, sampled_observations, bootstrap, actions=None):
         rollouts = {'observation': tf.TensorArray(tf.float32, size=self._config.horizon),
                     'next_observation': tf.TensorArray(tf.float32, size=self._config.horizon),
                     'action': tf.TensorArray(tf.float32, size=self._config.horizon),
@@ -51,7 +50,8 @@ class MBPO(tf.Module):
         observation = sampled_observations
         for k in tf.range(self._config.horizon):
             rollouts['observation'] = rollouts['observation'].write(k, observation)
-            action = self._actor(tf.stop_gradient(observation)).sample()
+            action = self._actor(tf.stop_gradient(observation)).sample() \
+                if actions is None else actions[k]
             rollouts['action'] = rollouts['action'].write(k, action)
             predictions = bootstrap(observation, action)
             observation = predictions['next_observation'].sample()

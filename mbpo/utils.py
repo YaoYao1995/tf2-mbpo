@@ -1,9 +1,14 @@
 from collections import defaultdict
 
+import gym
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
+from gym.wrappers import RescaleAction
 from tensorboardX import SummaryWriter
+from tqdm import tqdm
+
+from mbpo.env_wrappers import ActionRepeat, ObservationNormalize, TestObservationNormalize
 
 
 # Following https://github.com/tensorflow/probability/issues/840 and
@@ -75,3 +80,56 @@ class TrainingLogger(object):
         video = np.expand_dims(np.transpose(images, [0, 3, 1, 2]), axis=0)
         self._writer.add_video('Evaluation policy', video, step)
         self._writer.flush()
+
+
+def do_episode(agent, training, environment, config, pbar, render):
+    observation = environment.reset()
+    episode_summary = defaultdict(list)
+    steps = 0
+    done = False
+    while not done:
+        action = agent(observation, training)
+        next_observation, reward, terminal, info = environment.step(action)
+        agent.observe(dict(observation=observation.astype(np.float32)[np.newaxis, np.newaxis],
+                           next_observation=next_observation.astype(np.float32)[
+                               np.newaxis, np.newaxis],
+                           action=action.astype(np.float32)[np.newaxis, np.newaxis],
+                           reward=np.array([[reward]], dtype=np.float32),
+                           terminal=np.array([[terminal]], dtype=np.bool),
+                           info=np.array([[info]], dtype=dict)))
+        if render:
+            episode_summary['image'].append(environment.render(mode='rgb_array'))
+        pbar.update(config.action_repeat)
+        steps += config.action_repeat
+        done = terminal or steps >= config.episode_length
+        episode_summary['observation'].append(observation)
+        episode_summary['next_observation'].append(next_observation)
+        episode_summary['reward'].append(reward)
+        episode_summary['terminal'].append(terminal)
+        episode_summary['info'].append(info)
+        observation = next_observation
+    return steps, episode_summary
+
+
+def interact(agent, environment, steps, config, training=True):
+    pbar = tqdm(total=steps)
+    steps_count = 0
+    episodes = []
+    while steps_count < steps:
+        episode_steps, episode_summary = \
+            do_episode(agent, training,
+                       environment, config,
+                       pbar, len(episodes) < config.render_episodes and not training)
+        steps_count += episode_steps
+        episodes.append(episode_summary)
+    pbar.close()
+    return steps, episodes
+
+
+def make_env(name, action_repeat):
+    env = gym.make(name)
+    env = ActionRepeat(env, action_repeat)
+    env = RescaleAction(env, -1.0, 1.0)
+    train_env = ObservationNormalize(env)
+    test_env = TestObservationNormalize(train_env)
+    return train_env, test_env

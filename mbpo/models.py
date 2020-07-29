@@ -36,7 +36,7 @@ class WorldModel(tf.Module):
             loc=self._next_observation_residual_mu(x) + tf.stop_gradient(observation),
             scale_diag=self._next_observation_stddev(x)),
             reward=tfd.Normal(loc=self._reward_mu(x), scale=1.0),
-            terminal=tfd.Bernoulli(logits=self._terminal_logit(x)))
+            terminal=tfd.Bernoulli(logits=self._terminal_logit(x), dtype=tf.float32))
 
 
 class Actor(tf.Module):
@@ -70,6 +70,6 @@ class Critic(tf.Module):
             tf.keras.layers.Dense(units=1, activity_regularizer=tf.keras.regularizers.l2(
                                       output_regularization)))
 
-    def __call__(self, observation, action):
-        mu = self._action_value(tf.concat([observation, action], axis=1))
+    def __call__(self, observation):
+        mu = self._action_value(observation)
         return tfd.Normal(loc=mu, scale=1.0)

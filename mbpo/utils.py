@@ -90,13 +90,12 @@ def do_episode(agent, training, environment, config, pbar, render):
     while not done:
         action = agent(observation, training)
         next_observation, reward, terminal, info = environment.step(action)
-        agent.observe(dict(observation=observation.astype(np.float32)[np.newaxis, np.newaxis],
-                           next_observation=next_observation.astype(np.float32)[
-                               np.newaxis, np.newaxis],
-                           action=action.astype(np.float32)[np.newaxis, np.newaxis],
-                           reward=np.array([[reward]], dtype=np.float32),
-                           terminal=np.array([[terminal]], dtype=np.bool),
-                           info=np.array([[info]], dtype=dict)))
+        agent.observe(dict(observation=observation.astype(np.float32),
+                           next_observation=next_observation.astype(np.float32),
+                           action=action.astype(np.float32),
+                           reward=np.array([reward], dtype=np.float32),
+                           terminal=np.array([terminal], dtype=np.bool),
+                           info=np.array([info], dtype=dict)))
         if render:
             episode_summary['image'].append(environment.render(mode='rgb_array'))
         pbar.update(config.action_repeat)
@@ -133,3 +132,4 @@ def make_env(name, action_repeat):
     train_env = ObservationNormalize(env)
     test_env = TestObservationNormalize(train_env)
     return train_env, test_env
+

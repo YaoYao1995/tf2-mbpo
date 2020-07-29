@@ -130,22 +130,21 @@ class MBPO(tf.Module):
 
     @tf.function
     def _update_critic(self, observation, next_observation, action, reward, terminal):
-        for i in range(self._config.critic_grad_steps_per_update_step):
-            if i % 3 == 0:
-                target_td = reward + self._config.discount * (1.0 - terminal) * \
-                            self._critic(next_observation,
-                                         self._actor(next_observation).sample()).mode()
-            critic_loss, critic_grads = self._critic_grad_step(
-                observation,
-                action,
-                target_td)
-            self._logger['critic_loss'].update_state(critic_loss)
-            self._logger['critic_grads'].update_state(tf.norm(critic_grads))
+        bootsrapped_target = reward + self._config.discount * (1.0 - terminal) * \
+                    self._critic(next_observation,
+                                 self._actor(next_observation).sample()).mode()
+        critic_loss, critic_grads = self._critic_grad_step(
+            observation,
+            action,
+            bootsrapped_target)
+        self._logger['critic_loss'].update_state(critic_loss)
+        self._logger['critic_grads'].update_state(tf.norm(critic_grads))
 
     @tf.function
-    def _critic_grad_step(self, observation, action, target_td):
+    def _critic_grad_step(self, observation, action, bootsrapped_target):
         with tf.GradientTape() as critic_tape:
-            q_log_p = self._critic(observation, action).log_prob(tf.stop_gradient(target_td))
+            q_log_p = self._critic(observation, action)\
+                .log_prob(tf.stop_gradient(bootsrapped_target))
             grads = critic_tape.gradient(-q_log_p, self._critic.trainable_variables)
             self._critic_optimizer.apply_gradients(zip(grads, self._critic.trainable_variables))
         return -q_log_p, tf.linalg.global_norm(grads)

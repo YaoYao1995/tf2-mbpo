@@ -17,7 +17,6 @@ def define_config():
         'model_rollouts': 400,
         'warmup_training_steps': 5000,
         'model_grad_steps': 500,
-        'critic_grad_steps_per_update_step': 12,
         'actor_critic_update_steps': 25,
         'model_batch_size': 128,
         'actor_critic_batch_size': 512,

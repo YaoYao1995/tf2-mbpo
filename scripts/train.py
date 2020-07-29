@@ -1,11 +1,11 @@
 import argparse
 import random
+
 import numpy as np
 import tensorflow as tf
 
-
-from mbpo.mbpo import MBPO
 import mbpo.utils as utils
+from mbpo.mbpo import MBPO
 
 
 def define_config():
@@ -61,12 +61,15 @@ def main(config):
             agent, test_env, config.evaluation_steps_per_epoch, config, training=False)
         eval_summary = dict(eval_score=np.asarray([
             sum(episode['reward'])
-            for episode in evaluation_episodes_summaries]).mean())
-        logger.log_evaluation_summary(eval_summary, training_steps)
+            for episode in evaluation_episodes_summaries]).mean(),
+                            episode_length=np.asarray([
+                                episode['steps'][0]
+                                for episode in evaluation_episodes_summaries]).mean())
+        logger.log_evaluation_summary(eval_summary, steps)
         for episode in evaluation_episodes_summaries:
             video = episode.get('image', None)
             if video:
-                logger.log_video(video, training_steps)
+                logger.log_video(video, steps)
 
 
 if __name__ == '__main__':

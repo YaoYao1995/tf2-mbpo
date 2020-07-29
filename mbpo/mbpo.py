@@ -47,6 +47,7 @@ class MBPO(tf.Module):
                     'action': tf.TensorArray(tf.float32, size=self._config.horizon),
                     'reward': tf.TensorArray(tf.float32, size=self._config.horizon),
                     'terminal': tf.TensorArray(tf.bool, size=self._config.horizon)}
+        done_rollout = tf.zeros((tf.shape(sampled_observations)[0],), dtype=tf.bool)
         observation = sampled_observations
         for k in tf.range(self._config.horizon):
             rollouts['observation'] = rollouts['observation'].write(k, observation)
@@ -54,32 +55,23 @@ class MBPO(tf.Module):
                 if actions is None else actions[k]
             rollouts['action'] = rollouts['action'].write(k, action)
             predictions = bootstrap(observation, action)
-            observation = predictions['next_observation'].sample()
+            # If the rollout is done, we stay at the terminal state, not overriding with a new,
+            # possibly valid state.
+            observation = tf.where(done_rollout,
+                                   observation,
+                                   predictions['next_observation'].sample())
             rollouts['next_observation'] = rollouts['next_observation'].write(k, observation)
-            rollouts['reward'] = rollouts['reward'].write(k, predictions['reward'].mean())
-            terminal = tf.cast(predictions['terminal'].mode(), tf.bool)
+            terminal = tf.where(done_rollout,
+                                True,
+                                tf.cast(predictions['terminal'].mode(), tf.bool))
             rollouts['terminal'] = rollouts['terminal'].write(k, terminal)
-        # After the first time step in which our model predicts terminal=True, the predicted
-        # transitions are not valid anymore, hence we filter them out.
-        terminals_stack = tf.cast(tf.transpose(rollouts['terminal'].stack(), [1, 0, 2]), tf.int32)
-        # TODO (yarden): change name if not masking.
-        valid_transition_mask = tf.where(
-            tf.greater_equal(tf.math.cumsum(terminals_stack, axis=1, exclusive=True), 1),
-            False,
-            True)
-        terminals_stack = tf.logical_or(tf.logical_not(valid_transition_mask),
-                                        tf.cast(terminals_stack, tf.bool))
-
-        # def filter_steps_after_terminal(unfiltered_data, rollouts_masks):
-        #     transposed = tf.transpose(unfiltered_data.stack(), [1, 0, 2])
-        #     return tf.ragged.boolean_mask(transposed, tf.squeeze(rollouts_masks)).to_list()
-        #
-        # return {k: filter_steps_after_terminal(v, valid_transition_mask) for k, v in
-        #         rollouts.items()}
-        out = {k: tf.transpose(v.stack(), [1, 0, 2])
-               for k, v in rollouts.items() if k != 'terminal'}
-        out['terminal'] = terminals_stack
-        return out
+            reward = tf.where(done_rollout,
+                              0.0,
+                              predictions['reward'].mean())
+            rollouts['reward'] = rollouts['reward'].write(k, reward)
+            done_rollout = tf.logical_or(
+                terminal, done_rollout)
+        return {k: tf.transpose(v.stack(), [1, 0, 2]) for k, v in rollouts.items()}
 
     def update_model(self):
         print("Updating model.")

@@ -39,7 +39,8 @@ def define_config():
         'training_steps_per_epoch': 10000,
         'evaluation_steps_per_epoch': 5000,
         'log_dir': None,
-        'render_episodes': 1
+        'render_episodes': 1,
+        'debug_model': False
     }
 
 
@@ -60,20 +61,20 @@ def main(config):
         evaluation_steps, evaluation_episodes_summaries = utils.interact(
             agent, test_env, config.evaluation_steps_per_epoch, config, training=False)
         eval_summary = dict(eval_score=np.asarray([
-            sum(episode['reward'])
-            for episode in evaluation_episodes_summaries]).mean(),
+            sum(episode['reward']) for episode in evaluation_episodes_summaries]).mean(),
                             episode_length=np.asarray([
                                 episode['steps'][0]
                                 for episode in evaluation_episodes_summaries]).mean())
+        if config.render_episodes:
+            video = evaluation_episodes_summaries[config.render_episodes - 1].get('image')
+            logger.log_video(video, steps)
+        if config.debug_model:
+            eval_summary.update(utils.debug_model(evaluation_episodes_summaries, agent))
         logger.log_evaluation_summary(eval_summary, steps)
-        for episode in evaluation_episodes_summaries:
-            video = episode.get('image', None)
-            if video:
-                logger.log_video(video, steps)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     for key, value in define_config().items():
-        parser.add_argument('--{}'.format(key), type=type(value), default=value)
+        parser.add_argument('--{}'.format(key), type=type(value) if value else str, default=value)
     main(parser.parse_args())

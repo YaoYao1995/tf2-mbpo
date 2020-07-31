@@ -19,7 +19,7 @@ class MBPO(tf.Module):
         self._logger = logger
         self._training_step = 0
         self._experience = ReplayBuffer(observation_space.shape[0], action_space.shape[0])
-        self._ensemble = [models.WorldModel(
+        self.ensemble = [models.WorldModel(
             observation_space.shape[0],
             self._config.dynamics_layers,
             self._config.units, reward_layers=2, terminal_layers=2)
@@ -52,7 +52,7 @@ class MBPO(tf.Module):
         parameters = []
         loss = 0.0
         with tf.GradientTape() as model_tape:
-            for i, world_model in enumerate(self._ensemble):
+            for i, world_model in enumerate(self.ensemble):
                 observations, target_next_observations, \
                 actions, target_rewards, target_terminals = \
                     bootstraps_batches['observation'][i], \
@@ -74,19 +74,20 @@ class MBPO(tf.Module):
         self._logger['world_model_total_loss'].update_state(loss)
         self._logger['world_model_grads'].update_state(tf.linalg.global_norm(grads))
 
-    @tf.function
+    # @tf.function
     def imagine_rollouts(self, sampled_observations, bootstrap, actions=None):
-        rollouts = {'observation': tf.TensorArray(tf.float32, size=self._config.horizon),
-                    'next_observation': tf.TensorArray(tf.float32, size=self._config.horizon),
-                    'action': tf.TensorArray(tf.float32, size=self._config.horizon),
-                    'reward': tf.TensorArray(tf.float32, size=self._config.horizon),
-                    'terminal': tf.TensorArray(tf.float32, size=self._config.horizon)}
+        horizon = self._config.horizon if actions is None else tf.shape(actions)[0]
+        rollouts = {'observation': tf.TensorArray(tf.float32, size=horizon),
+                    'next_observation': tf.TensorArray(tf.float32, size=horizon),
+                    'action': tf.TensorArray(tf.float32, size=horizon),
+                    'reward': tf.TensorArray(tf.float32, size=horizon),
+                    'terminal': tf.TensorArray(tf.float32, size=horizon)}
         done_rollout = tf.zeros((tf.shape(sampled_observations)[0], 1), dtype=tf.bool)
         observation = sampled_observations
-        for k in tf.range(self._config.horizon):
+        for k in tf.range(horizon if actions is None else tf.shape(actions)[0]):
             rollouts['observation'] = rollouts['observation'].write(k, observation)
             action = self._actor(tf.stop_gradient(observation)).sample() \
-                if actions is None else actions[k]
+                if actions is None else tf.expand_dims(actions[k, ...], axis=0)
             rollouts['action'] = rollouts['action'].write(k, action)
             predictions = bootstrap(observation, action)
             # If the rollout is done, we stay at the terminal state, not overriding with a new,
@@ -184,7 +185,7 @@ class MBPO(tf.Module):
                     self.update_model(batch)
                     self.update_actor_critic(
                         tf.constant(batch['observation'], dtype=tf.float32),
-                        random.choice(self._ensemble))
+                        random.choice(self.ensemble))
             if self.warm:
                 action = self._actor(
                     np.expand_dims(observation, axis=0).astype(np.float32)).sample().numpy()

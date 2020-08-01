@@ -179,7 +179,7 @@ class MBPO(tf.Module):
             if self.time_to_update and self.warm:
                 print("Updating world model, actor and critic.")
                 for _ in tqdm(range(self._config.update_steps), position=0, leave=True):
-                    batch = self._experience.sample(self._config.model_rollouts,
+                    batch = self._experience.sample(self._config.batch_size,
                                                     filter_goal_mets=self._config.filter_goal_mets)
                     self.update_model(batch)
                     self.update_actor_critic(

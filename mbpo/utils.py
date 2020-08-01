@@ -133,3 +133,30 @@ def make_env(name, action_repeat):
     train_env = ObservationNormalize(env)
     test_env = TestObservationNormalize(train_env)
     return train_env, test_env
+
+
+# Reading the errors produced by this function should assume all obsersvations are normalized to
+# [-1, 1]
+def debug_model(episodes_summaries, agent):
+    observations_mse = 0.0
+    rewards_mse = 0.0
+    terminal_accuracy = 0.0
+    n_episodes = min(len(episodes_summaries), 30)
+    for i in range(n_episodes):
+        observations = tf.expand_dims(
+            tf.constant(episodes_summaries[i]['observation'][0], dtype=tf.float32), axis=0)
+        actions = tf.constant(episodes_summaries[i]['action'], dtype=tf.float32)
+        actions = tf.expand_dims(actions, axis=1) if tf.rank(actions) < 2 else actions
+        predicted_rollouts = agent.imagine_rollouts(observations, random.choice(agent.ensemble),
+                                                    actions)
+        observations_mse += (np.asarray(predicted_rollouts['next_observation'].numpy()
+                                        - episodes_summaries[i][
+                                            'next_observation']) ** 2).mean() / n_episodes
+        rewards_mse += (np.asarray(predicted_rollouts['reward'].numpy() -
+                                   episodes_summaries[i]['reward']) ** 2).mean() / n_episodes
+        terminal_accuracy += (np.abs(predicted_rollouts['terminal'] -
+                                     episodes_summaries[i][
+                                         'terminal']) < 1e-5).all().mean() / n_episodes
+    return dict(observations_mse=observations_mse,
+                rewards_mse=rewards_mse,
+                terminal_accuracy=terminal_accuracy)

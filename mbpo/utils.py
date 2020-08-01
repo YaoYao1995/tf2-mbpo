@@ -90,7 +90,8 @@ def do_episode(agent, training, environment, config, pbar, render):
     done = False
     while not done:
         action = agent(observation, training).squeeze()
-        next_observation, reward, terminal, info = environment.step(action)
+        next_observation, reward, done, info = environment.step(action)
+        terminal = done and not info.get('TimeLimit.truncated')
         agent.observe(dict(observation=observation.astype(np.float32),
                            next_observation=next_observation.astype(np.float32),
                            action=action.astype(np.float32),
@@ -102,7 +103,6 @@ def do_episode(agent, training, environment, config, pbar, render):
             episode_summary['image'].append(environment.render(mode='rgb_array'))
         pbar.update(config.action_repeat)
         steps += config.action_repeat
-        done = terminal or steps >= config.episode_length
         episode_summary['observation'].append(observation)
         episode_summary['next_observation'].append(next_observation)
         episode_summary['action'].append(action)
@@ -128,8 +128,13 @@ def interact(agent, environment, steps, config, training=True):
     return steps, episodes
 
 
-def make_env(name, action_repeat):
+def make_env(name, episode_length, action_repeat):
     env = gym.make(name)
+    if not isinstance(env, gym.wrappers.TimeLimit):
+        env = gym.wrappers.TimeLimit(env, max_episode_steps=episode_length)
+    else:
+        # https://github.com/openai/gym/issues/499
+        env._max_episode_steps = episode_length
     env = ActionRepeat(env, action_repeat)
     env = RescaleAction(env, -1.0, 1.0)
     train_env = ObservationNormalize(env)

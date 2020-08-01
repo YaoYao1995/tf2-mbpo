@@ -49,7 +49,8 @@ def main(config):
     np.random.seed(config.seed)
     tf.random.set_seed(config.seed)
     logger = utils.TrainingLogger(config.log_dir)
-    train_env, test_env = utils.make_env(config.environment, config.action_repeat)
+    train_env, test_env = utils.make_env(config.environment, config.episode_length,
+                                         config.action_repeat)
     agent = MBPO(config, logger, train_env.observation_space, train_env.action_space)
     steps = 0
     while steps < config.total_training_steps:

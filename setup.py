@@ -15,6 +15,7 @@ setup(
         'numpy~=1.17.4',
         'tensorflow>=2.1.0',
         'tensorflow-probability',
+        'tensorflow-addons',
         'moviepy>=1.0.0',
         'tensorboardx>=1.8'
     ]

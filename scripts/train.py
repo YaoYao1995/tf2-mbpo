@@ -1,3 +1,4 @@
+import os
 import argparse
 import random
 
@@ -40,7 +41,8 @@ def define_config():
         'evaluation_steps_per_epoch': 5000,
         'log_dir': None,
         'render_episodes': 1,
-        'debug_model': False
+        'debug_model': False,
+        'cuda_device': None
     }
 
 
@@ -78,4 +80,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     for key, value in define_config().items():
         parser.add_argument('--{}'.format(key), type=type(value) if value else str, default=value)
-    main(parser.parse_args())
+    config = parser.parse_args()
+    if config.cuda_device is not None:
+        os.environ['CUDA_VISIBLE_DEVICES'] = config.cuda_device
+    main(config)

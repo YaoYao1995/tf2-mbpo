@@ -2,8 +2,6 @@ import numpy as np
 from gym import Wrapper, ObservationWrapper
 from gym.spaces import Box
 
-from gym.wrappers import Monitor
-
 
 # Copied from https://github.com/danijar/dreamer/blob/02f0210f5991c7710826ca7881f19c64a012290c
 # /wrappers.py

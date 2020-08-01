@@ -74,7 +74,7 @@ class MBPO(tf.Module):
         self._logger['world_model_total_loss'].update_state(loss)
         self._logger['world_model_grads'].update_state(tf.linalg.global_norm(grads))
 
-    # @tf.function
+    @tf.function
     def imagine_rollouts(self, sampled_observations, bootstrap, actions=None):
         horizon = self._config.horizon if actions is None else tf.shape(actions)[0]
         rollouts = {'observation': tf.TensorArray(tf.float32, size=horizon),

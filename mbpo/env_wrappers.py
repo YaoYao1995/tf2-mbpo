@@ -19,6 +19,7 @@ class ActionRepeat(Wrapper):
             obs, reward, done, info = self.env.step(action)
             total_reward += reward
             current_step += 1
+        info['steps'] = current_step
         return obs, total_reward, done, info
 
 

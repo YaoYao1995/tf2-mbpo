@@ -172,6 +172,7 @@ class MBPO(tf.Module):
         return self._training_step >= self._config.warmup_training_steps
 
     def observe(self, transition):
+        self._training_step += transition.get('steps', self._config.action_repeat)
         self._experience.store(transition)
 
     def __call__(self, observation, training=True):
@@ -190,7 +191,6 @@ class MBPO(tf.Module):
                     np.expand_dims(observation, axis=0).astype(np.float32)).sample().numpy()
             else:
                 action = self._warmup_policy()
-            self._training_step += self._config.action_repeat
         else:
             action = self._actor(
                 np.expand_dims(observation, axis=0).astype(np.float32)).mode().numpy()

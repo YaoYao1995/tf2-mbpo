@@ -79,7 +79,7 @@ class TrainingLogger(object):
 
     def log_video(self, images, step):
         video = np.expand_dims(np.transpose(images, [0, 3, 1, 2]), axis=0)
-        self._writer.add_video('Evaluation policy', video, step)
+        self._writer.add_video('Evaluation policy', video, step, fps=30)
         self._writer.flush()
 
 
@@ -101,8 +101,8 @@ def do_episode(agent, training, environment, config, pbar, render):
         observation = next_observation
         if render:
             episode_summary['image'].append(environment.render(mode='rgb_array'))
-        pbar.update(config.action_repeat)
-        steps += config.action_repeat
+        pbar.update(info.get('steps', config.action_repeat))
+        steps += info.get('steps', config.action_repeat)
         episode_summary['observation'].append(observation)
         episode_summary['next_observation'].append(next_observation)
         episode_summary['action'].append(action)

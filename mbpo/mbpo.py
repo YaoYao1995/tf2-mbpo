@@ -113,7 +113,7 @@ class MBPO(tf.Module):
                                                         rollouts['reward'], \
                                                         rollouts['terminal']
         lambda_values = tf.TensorArray(tf.float32, self._config.horizon)
-        v_lambda = self._critic(next_observation[:, -1, ...]).mode()
+        v_lambda = self._critic(next_observation[:, -1, ...]).mode() * (1.0 - terminals[:, -1])
         # reverse traversing over data.
         for t in tf.range(self._config.horizon - 1, -1, -1):
             td = rewards[:, t] + \

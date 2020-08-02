@@ -10,7 +10,7 @@ from mbpo.replay_buffer import ReplayBuffer
 
 
 # TODO (yarden): observe gradients of actor - if small maybe vanishing??? - if so, return to
-# DDPG/SAC style algorithms (with q-function)
+# DDPG/SAC style algorithms (with q-function) or use gru/lstm in dynamics
 
 class MBPO(tf.Module):
     def __init__(self, config, logger, observation_space, action_space):

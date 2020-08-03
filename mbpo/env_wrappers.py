@@ -81,8 +81,9 @@ class ObservationNormalize(ObservationWrapper):
 # without updating the statistics of test data.
 class TestObservationNormalize(ObservationWrapper):
     def __init__(self, env, normalize):
-        assert isinstance(env, ObservationNormalize), \
-            "TestObservationNormalize can only wrap ObservationNormalize"
+        assert not isinstance(env, ObservationNormalize), \
+            "TestObservationNormalize should not wrap ObservationNormalize - this will cause a " \
+            "duplicate normalization"
         super(TestObservationNormalize, self).__init__(env)
         self.normalize = normalize
 

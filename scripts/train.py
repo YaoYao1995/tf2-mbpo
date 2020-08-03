@@ -67,8 +67,11 @@ def main(config):
             sum(episode['reward']) for episode in evaluation_episodes_summaries]).mean(),
                             episode_length=np.asarray([
                                 episode['steps'][0]
-                                for episode in evaluation_episodes_summaries]).mean())
-        if config.render_episodes:
+                                for episode in evaluation_episodes_summaries]).mean(),
+                            training_sum_rewards=np.asarray([
+                                sum(episode['reward']) for episode in training_episodes_summaries
+                            ]).mean())
+        if config.render_episodes and config.evaluation_steps_per_epoch:
             video = evaluation_episodes_summaries[config.render_episodes - 1].get('image')
             logger.log_video(video, steps)
         if config.debug_model:

@@ -153,7 +153,7 @@ def debug_model(episodes_summaries, agent):
         observations = tf.expand_dims(
             tf.constant(episodes_summaries[i]['observation'][0], dtype=tf.float32), axis=0)
         actions = tf.constant(episodes_summaries[i]['action'], dtype=tf.float32)
-        actions = tf.expand_dims(actions, axis=1) if tf.rank(actions) < 2 else actions
+        actions = actions[:, tf.newaxis, tf.newaxis] if tf.rank(actions) < 2 else actions
         predicted_rollouts = agent.imagine_rollouts(observations, random.choice(agent.ensemble),
                                                     actions)
         observations_mse += (np.asarray(predicted_rollouts['next_observation'].numpy()

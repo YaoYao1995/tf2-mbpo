@@ -30,10 +30,12 @@ class ObservationNormalize(ObservationWrapper):
         # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford
         # 's_online_algorithm
         self._step = 0
-        self._mean = np.zeros(self.env.observation_space.shape,
-                              dtype=self.env.observation_space.dtype)
-        self._m2 = np.ones(self.env.observation_space.shape,
-                           dtype=self.env.observation_space.dtype)
+        self._mean_live = np.zeros(self.env.observation_space.shape,
+                                   dtype=self.env.observation_space.dtype)
+        self._mean = self._mean_live.copy()
+        self._m2_live = np.ones(self.env.observation_space.shape,
+                                dtype=self.env.observation_space.dtype)
+        self._m2 = self._m2.copy()
         self._mask = np.logical_and(
             np.isfinite(env.observation_space.low),
             np.isfinite(env.observation_space.high)
@@ -61,19 +63,28 @@ class ObservationNormalize(ObservationWrapper):
 
     def observation(self, observation):
         self._step += 1
-        delta = observation - self._mean
-        self._mean += delta / self._step
-        self._m2 += delta * (observation - self._mean)
+        delta = observation - self._mean_live
+        self._mean_live += delta / self._step
+        self._m2_live += delta * (observation - self._mean_live)
         return self.normalize(observation)
+
+    def reset(self):
+        # We update the statistics at the end of each epoch - this assumes that the agent updates
+        # its models at the end of each epoch as well.
+        observation = self.env.reset()
+        self._mean = self._mean_live.copy()
+        self._m2 = self._m2_live.copy()
+        return self.observation(observation)
 
 
 # Normalized observations using the mean and variance of data collected in training
 # without updating the statistics of test data.
 class TestObservationNormalize(ObservationWrapper):
-    def __init__(self, env):
+    def __init__(self, env, normalize):
         assert isinstance(env, ObservationNormalize), \
             "TestObservationNormalize can only wrap ObservationNormalize"
         super(TestObservationNormalize, self).__init__(env)
+        self.normalize = normalize
 
     def observation(self, observation):
-        return self.env.normalize(observation)
+        return self.normalize(observation)

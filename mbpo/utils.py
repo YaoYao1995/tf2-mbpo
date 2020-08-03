@@ -139,7 +139,7 @@ def make_env(name, episode_length, action_repeat):
     env = ActionRepeat(env, action_repeat)
     env = RescaleAction(env, -1.0, 1.0)
     train_env = ObservationNormalize(env)
-    test_env = TestObservationNormalize(train_env)
+    test_env = TestObservationNormalize(env, train_env.normalize)
     return train_env, test_env
 
 

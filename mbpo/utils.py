@@ -79,7 +79,7 @@ class TrainingLogger(object):
 
     def log_video(self, images, step):
         video = np.expand_dims(np.transpose(images, [0, 3, 1, 2]), axis=0)
-        self._writer.add_video('Evaluation policy', video, step, fps=30)
+        self._writer.add_video('Evaluation policy', video, step, fps=15)
         self._writer.flush()
 
 
@@ -92,12 +92,13 @@ def do_episode(agent, training, environment, config, pbar, render):
         action = agent(observation, training).squeeze()
         next_observation, reward, done, info = environment.step(action)
         terminal = done and not info.get('TimeLimit.truncated')
-        agent.observe(dict(observation=observation.astype(np.float32),
-                           next_observation=next_observation.astype(np.float32),
-                           action=action.astype(np.float32),
-                           reward=np.array([reward], dtype=np.float32),
-                           terminal=np.array([terminal], dtype=np.bool),
-                           info=np.array([info], dtype=dict)), training=training)
+        if training:
+            agent.observe(dict(observation=observation.astype(np.float32),
+                               next_observation=next_observation.astype(np.float32),
+                               action=action.astype(np.float32),
+                               reward=np.array([reward], dtype=np.float32),
+                               terminal=np.array([terminal], dtype=np.bool),
+                               info=np.array([info], dtype=dict)), training=training)
         observation = next_observation
         if render:
             episode_summary['image'].append(environment.render(mode='rgb_array'))

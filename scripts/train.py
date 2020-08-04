@@ -1,5 +1,5 @@
-import os
 import argparse
+import os
 import random
 
 import numpy as np
@@ -17,7 +17,10 @@ def define_config():
         'discount': 0.99,
         'lambda_': 0.95,
         'steps_per_update': 1000,
-        'batch_size': 64,
+        # This batch size is split evenly among world models in the ensemble but gets as a whole
+        # for the actor critic. This *might* reduce the high variance of the actor-critic and
+        # still be not too large batch size for the model.
+        'batch_size': 320,
         'warmup_training_steps': 5000,
         # MODELS
         'dynamics_layers': 4,

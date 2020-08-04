@@ -211,7 +211,7 @@ class MBPO(tf.Module):
         best_so_far_score = -np.inf * tf.ones((), dtype=tf.float32)
         for _ in tf.range(10):
             action_sequences = tf.random.normal(
-                shape=(100, 8, action_dim),
+                shape=(150, 8, action_dim),
                 mean=mu, stddev=sigma
             )
             action_sequences = tf.clip_by_value(action_sequences, -1.0, 1.0)

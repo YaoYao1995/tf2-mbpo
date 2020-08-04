@@ -79,7 +79,7 @@ class TrainingLogger(object):
 
     def log_video(self, images, step):
         video = np.expand_dims(np.transpose(images, [0, 3, 1, 2]), axis=0)
-        self._writer.add_video('Evaluation policy', video, step, fps=30)
+        self._writer.add_video('Evaluation policy', video, step, fps=15)
         self._writer.flush()
 
 
@@ -92,12 +92,13 @@ def do_episode(agent, training, environment, config, pbar, render):
         action = agent(observation, training).squeeze()
         next_observation, reward, done, info = environment.step(action)
         terminal = done and not info.get('TimeLimit.truncated')
-        agent.observe(dict(observation=observation.astype(np.float32),
-                           next_observation=next_observation.astype(np.float32),
-                           action=action.astype(np.float32),
-                           reward=np.array([reward], dtype=np.float32),
-                           terminal=np.array([terminal], dtype=np.bool),
-                           info=np.array([info], dtype=dict)), training=training)
+        if training:
+            agent.observe(dict(observation=observation.astype(np.float32),
+                               next_observation=next_observation.astype(np.float32),
+                               action=action.astype(np.float32),
+                               reward=np.array([reward], dtype=np.float32),
+                               terminal=np.array([terminal], dtype=np.bool),
+                               info=np.array([info], dtype=dict)))
         observation = next_observation
         if render:
             episode_summary['image'].append(environment.render(mode='rgb_array'))
@@ -138,7 +139,7 @@ def make_env(name, episode_length, action_repeat):
     env = ActionRepeat(env, action_repeat)
     env = RescaleAction(env, -1.0, 1.0)
     train_env = ObservationNormalize(env)
-    test_env = TestObservationNormalize(train_env)
+    test_env = TestObservationNormalize(env, train_env.normalize)
     return train_env, test_env
 
 
@@ -153,7 +154,7 @@ def debug_model(episodes_summaries, agent):
         observations = tf.expand_dims(
             tf.constant(episodes_summaries[i]['observation'][0], dtype=tf.float32), axis=0)
         actions = tf.constant(episodes_summaries[i]['action'], dtype=tf.float32)
-        actions = tf.expand_dims(actions, axis=1) if tf.rank(actions) < 2 else actions
+        actions = actions[:, tf.newaxis, tf.newaxis] if tf.rank(actions) < 2 else actions
         predicted_rollouts = agent.imagine_rollouts(observations, random.choice(agent.ensemble),
                                                     actions)
         observations_mse += (np.asarray(predicted_rollouts['next_observation'].numpy()

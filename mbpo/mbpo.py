@@ -86,7 +86,7 @@ class MBPO(tf.Module):
         for k in tf.range(horizon if actions is None else tf.shape(actions)[0]):
             rollouts['observation'] = rollouts['observation'].write(k, observation)
             action = self._actor(tf.stop_gradient(observation)).sample() \
-                if actions is None else tf.expand_dims(actions[k, ...], axis=0)
+                if actions is None else actions[k, ...]
             rollouts['action'] = rollouts['action'].write(k, action)
             predictions = bootstrap(observation, action)
             # If the rollout is done, we stay at the terminal state, not overriding with a new,
@@ -171,9 +171,8 @@ class MBPO(tf.Module):
     def warm(self):
         return self._training_step >= self._config.warmup_training_steps
 
-    def observe(self, transition, training=True):
-        if training:
-            self._training_step += transition.get('steps', self._config.action_repeat)
+    def observe(self, transition):
+        self._training_step += transition.get('steps', self._config.action_repeat)
         self._experience.store(transition)
 
     def __call__(self, observation, training=True):

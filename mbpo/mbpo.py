@@ -44,7 +44,7 @@ class MBPO(tf.Module):
     def update_model(self, batch):
         self._model_grad_step(batch)
 
-    # @tf.function
+    @tf.function
     def _model_grad_step(self, batch):
         bootstraps_batches = {k: tf.split(
             v, [tf.shape(batch['observation'])[0] // self._config.ensemble_size] *

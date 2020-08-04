@@ -35,7 +35,7 @@ class ObservationNormalize(ObservationWrapper):
         self._mean = self._mean_live.copy()
         self._m2_live = np.ones(self.env.observation_space.shape,
                                 dtype=self.env.observation_space.dtype)
-        self._m2 = self._m2.copy()
+        self._m2 = self._m2_live.copy()
         self._mask = np.logical_and(
             np.isfinite(env.observation_space.low),
             np.isfinite(env.observation_space.high)

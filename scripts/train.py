@@ -17,7 +17,7 @@ def define_config():
         'discount': 0.99,
         'lambda_': 0.95,
         'steps_per_update': 1000,
-        'batch_size': 400,
+        'batch_size': 64,
         'warmup_training_steps': 5000,
         # MODELS
         'dynamics_layers': 4,

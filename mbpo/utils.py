@@ -98,7 +98,8 @@ def do_episode(agent, training, environment, config, pbar, render):
                                action=action.astype(np.float32),
                                reward=np.array([reward], dtype=np.float32),
                                terminal=np.array([terminal], dtype=np.bool),
-                               info=np.array([info], dtype=dict)))
+                               info=np.array([info], dtype=dict),
+                               steps=info.get('steps', config.action_repeat)))
         observation = next_observation
         if render:
             episode_summary['image'].append(environment.render(mode='rgb_array'))

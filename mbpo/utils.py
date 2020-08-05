@@ -146,7 +146,7 @@ def make_env(name, episode_length, action_repeat):
 
 # Reading the errors produced by this function should assume all obsersvations are normalized to
 # [-1, 1]
-def debug_model(episodes_summaries, agent):
+def evaluate_model(episodes_summaries, agent):
     observations_mse = 0.0
     rewards_mse = 0.0
     terminal_accuracy = 0.0

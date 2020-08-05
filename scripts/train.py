@@ -78,7 +78,7 @@ def main(config):
             video = evaluation_episodes_summaries[config.render_episodes - 1].get('image')
             logger.log_video(video, steps)
         if config.debug_model:
-            eval_summary.update(utils.debug_model(evaluation_episodes_summaries, agent))
+            eval_summary.update(utils.evaluate_model(evaluation_episodes_summaries, agent))
         logger.log_evaluation_summary(eval_summary, steps)
 
 

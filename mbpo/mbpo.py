@@ -174,7 +174,7 @@ class MBPO(tf.Module):
         return self._training_step >= self._config.warmup_training_steps
 
     def observe(self, transition):
-        self._training_step += transition.get('steps', self._config.action_repeat)
+        self._training_step += transition.pop('steps', self._config.action_repeat)
         self._experience.store(transition)
 
     def __call__(self, observation, training=True):

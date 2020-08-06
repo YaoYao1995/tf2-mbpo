@@ -45,7 +45,7 @@ def define_config():
         'log_dir': None,
         'render_episodes': 1,
         'debug_model': False,
-        'cuda_device': None
+        'cuda_device': '-1'
     }
 
 
@@ -87,6 +87,5 @@ if __name__ == '__main__':
     for key, value in define_config().items():
         parser.add_argument('--{}'.format(key), type=type(value) if value else str, default=value)
     config = parser.parse_args()
-    if config.cuda_device is not None:
-        os.environ['CUDA_VISIBLE_DEVICES'] = config.cuda_device
+    os.environ['CUDA_VISIBLE_DEVICES'] = config.cuda_device
     main(config)

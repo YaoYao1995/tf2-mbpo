@@ -48,7 +48,9 @@ class MBPO(tf.Module):
     def _model_grad_step(self, batch):
         bootstraps_batches = {k: tf.split(
             v, [tf.shape(batch['observation'])[0] // self._config.ensemble_size] *
-               self._config.ensemble_size) for k, v in batch.items()}
+               self._config.ensemble_size +
+               [tf.shape(batch['observation'])[0] % self._config.ensemble_size])
+            for k, v in batch.items()}
         parameters = []
         loss = 0.0
         with tf.GradientTape() as model_tape:
@@ -172,7 +174,7 @@ class MBPO(tf.Module):
         return self._training_step >= self._config.warmup_training_steps
 
     def observe(self, transition):
-        self._training_step += transition.get('steps', self._config.action_repeat)
+        self._training_step += transition.pop('steps', self._config.action_repeat)
         self._experience.store(transition)
 
     def __call__(self, observation, training=True):

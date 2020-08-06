@@ -98,7 +98,8 @@ def do_episode(agent, training, environment, config, pbar, render):
                                action=action.astype(np.float32),
                                reward=np.array([reward], dtype=np.float32),
                                terminal=np.array([terminal], dtype=np.bool),
-                               info=np.array([info], dtype=dict)))
+                               info=np.array([info], dtype=dict),
+                               steps=info.get('steps', config.action_repeat)))
         observation = next_observation
         if render:
             episode_summary['image'].append(environment.render(mode='rgb_array'))
@@ -145,26 +146,30 @@ def make_env(name, episode_length, action_repeat):
 
 # Reading the errors produced by this function should assume all obsersvations are normalized to
 # [-1, 1]
-def debug_model(episodes_summaries, agent):
+def evaluate_model(episodes_summaries, agent):
     observations_mse = 0.0
     rewards_mse = 0.0
     terminal_accuracy = 0.0
     n_episodes = min(len(episodes_summaries), 30)
+    prediction_horizon = 25
     for i in range(n_episodes):
         observations = tf.expand_dims(
             tf.constant(episodes_summaries[i]['observation'][0], dtype=tf.float32), axis=0)
         actions = tf.constant(episodes_summaries[i]['action'], dtype=tf.float32)
         actions = actions[:, tf.newaxis, tf.newaxis] if tf.rank(actions) < 2 else actions
+        actions = actions[-prediction_horizon:, ...]
         predicted_rollouts = agent.imagine_rollouts(observations, random.choice(agent.ensemble),
                                                     actions)
-        observations_mse += (np.asarray(predicted_rollouts['next_observation'].numpy()
-                                        - episodes_summaries[i][
-                                            'next_observation']) ** 2).mean() / n_episodes
-        rewards_mse += (np.asarray(predicted_rollouts['reward'].numpy() -
-                                   episodes_summaries[i]['reward']) ** 2).mean() / n_episodes
+        observations_mse += (np.asarray(
+            predicted_rollouts['next_observation'].numpy() -
+            episodes_summaries[i]['next_observation'][
+            -prediction_horizon:]) ** 2).mean() / n_episodes
+        rewards_mse += (np.asarray(
+            predicted_rollouts['reward'].numpy() -
+            episodes_summaries[i]['reward'][-prediction_horizon:]) ** 2).mean() / n_episodes
         terminal_accuracy += (np.abs(predicted_rollouts['terminal'] -
-                                     episodes_summaries[i][
-                                         'terminal']) < 1e-5).all().mean() / n_episodes
+                                     episodes_summaries[i]['terminal'][-prediction_horizon:])
+                              < 1e-5).mean() / n_episodes
     return dict(observations_mse=observations_mse,
                 rewards_mse=rewards_mse,
                 terminal_accuracy=terminal_accuracy)

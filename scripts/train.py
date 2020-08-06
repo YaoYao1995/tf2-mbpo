@@ -1,5 +1,5 @@
-import os
 import argparse
+import os
 import random
 
 import numpy as np
@@ -17,7 +17,10 @@ def define_config():
         'discount': 0.99,
         'lambda_': 0.95,
         'steps_per_update': 1000,
-        'batch_size': 64,
+        # This batch size is split evenly among world models in the ensemble but gets as a whole
+        # for the actor critic. This *might* reduce the high variance of the actor-critic and
+        # still be not too large batch size for the model.
+        'batch_size': 320,
         'warmup_training_steps': 5000,
         # MODELS
         'dynamics_layers': 4,
@@ -42,7 +45,7 @@ def define_config():
         'log_dir': None,
         'render_episodes': 1,
         'debug_model': False,
-        'cuda_device': None
+        'cuda_device': '-1'
     }
 
 
@@ -75,7 +78,7 @@ def main(config):
             video = evaluation_episodes_summaries[config.render_episodes - 1].get('image')
             logger.log_video(video, steps)
         if config.debug_model:
-            eval_summary.update(utils.debug_model(evaluation_episodes_summaries, agent))
+            eval_summary.update(utils.evaluate_model(evaluation_episodes_summaries, agent))
         logger.log_evaluation_summary(eval_summary, steps)
 
 
@@ -84,6 +87,5 @@ if __name__ == '__main__':
     for key, value in define_config().items():
         parser.add_argument('--{}'.format(key), type=type(value) if value else str, default=value)
     config = parser.parse_args()
-    if config.cuda_device is not None:
-        os.environ['CUDA_VISIBLE_DEVICES'] = config.cuda_device
+    os.environ['CUDA_VISIBLE_DEVICES'] = config.cuda_device
     main(config)

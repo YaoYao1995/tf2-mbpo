@@ -237,4 +237,4 @@ class MBPO(tf.Module):
             sigma = tf.sqrt(variance)
             if tf.less_equal(tf.reduce_mean(sigma), 0.1):
                 break
-        return best_so_far + tf.random.normal(best_so_far.shape, stddev=0.01)
+        return tf.clip_by_value(best_so_far + tf.random.normal(best_so_far.shape, stddev=0.01), -1.0, 1.0)

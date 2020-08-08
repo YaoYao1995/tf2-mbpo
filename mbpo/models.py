@@ -31,13 +31,13 @@ class WorldModel(tf.Module):
     def __call__(self, observation, action):
         cat = tf.concat([observation, action], axis=1)
         x = self._dynamics(cat)
+        # The world model predicts the difference between next_observation and observation.
         next_observation = tfd.MultivariateNormalDiag(
             loc=self._next_observation_residual_mu(x) + tf.stop_gradient(observation),
             scale_diag=self._next_observation_stddev(x))
         next_obs_sample = tf.stop_gradient(next_observation.sample())
         catcat = tf.concat([observation, action, next_obs_sample], axis=1)
         # TODO (yarden): maybe it's better to feed the reward and terminals s, a instead of x.
-        # The world model predicts the difference between next_observation and observation.
         return dict(next_observation=next_observation,
                     reward=tfd.Normal(loc=self._reward_mu(catcat), scale=1.0),
                     terminal=tfd.Bernoulli(logits=self._terminal_logit(next_obs_sample),

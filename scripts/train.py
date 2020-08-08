@@ -26,7 +26,7 @@ def define_config():
         'dynamics_layers': 4,
         'units': 128,
         'ensemble_size': 5,
-        'model_learning_rate': 2.5e-4,
+        'model_learning_rate': 5e-4,
         'actor_learning_rate': 3e-5,
         'critic_learning_rate': 3e-5,
         'grad_clip_norm': 5.0,

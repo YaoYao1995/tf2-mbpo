@@ -21,7 +21,8 @@ class ReplayBuffer(object):
 
     def update_statistics(self):
         cat = np.concatenate([
-            self._buffers['observation'], self._buffers['next_observation']], axis=0)
+            self._buffers['observation'][:self._size],
+            self._buffers['next_observation'][:self._size]], axis=0)
         self.obs_mean = np.mean(cat, axis=0)
         self.obs_stddev = np.std(cat, axis=0)
 

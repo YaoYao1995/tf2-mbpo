@@ -53,7 +53,7 @@ def main(config):
     random.seed(config.seed)
     np.random.seed(config.seed)
     tf.random.set_seed(config.seed)
-    logger = utils.TrainingLogger(config.log_dir)
+    logger = utils.TrainingLogger(config)
     train_env, test_env = utils.make_env(config.environment, config.episode_length,
                                          config.action_repeat)
     agent = MBPO(config, logger, train_env.observation_space, train_env.action_space)
@@ -88,5 +88,4 @@ if __name__ == '__main__':
         parser.add_argument('--{}'.format(key), type=type(value) if value else str, default=value)
     config = parser.parse_args()
     os.environ['CUDA_VISIBLE_DEVICES'] = config.cuda_device
-    utils.dump_string(utils.pretty_print(config), config.log_dir + 'params.txt')
     main(config)

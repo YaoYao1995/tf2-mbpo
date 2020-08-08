@@ -54,9 +54,10 @@ class SampleDist(object):
 
 
 class TrainingLogger(object):
-    def __init__(self, log_dir):
-        self._writer = SummaryWriter(log_dir)
+    def __init__(self, config):
+        self._writer = SummaryWriter(config.log_dir)
         self._metrics = defaultdict(tf.metrics.Mean)
+        dump_string(pretty_print(config), config.log_dir + '/params.txt')
 
     def __getitem__(self, item):
         return self._metrics[item]

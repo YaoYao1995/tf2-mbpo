@@ -40,7 +40,7 @@ class WorldModel(tf.Module):
         # The world model predicts the difference between next_observation and observation.
         return dict(next_observation=next_observation,
                     reward=tfd.Normal(loc=self._reward_mu(catcat), scale=1.0),
-                    terminal=tfd.Bernoulli(logits=self._terminal_logit(next_observation),
+                    terminal=tfd.Bernoulli(logits=self._terminal_logit(next_obs_sample),
                                            dtype=tf.float32))
 
 

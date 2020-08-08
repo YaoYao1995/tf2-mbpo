@@ -167,9 +167,9 @@ def evaluate_model(episodes_summaries, agent):
         rewards_mse += (np.asarray(
             predicted_rollouts['reward'].numpy() -
             episodes_summaries[i]['reward'][-prediction_horizon:]) ** 2).mean() / n_episodes
-        terminal_accuracy += (np.abs(predicted_rollouts['terminal'] -
+        terminal_accuracy += (1.0 - (np.abs(predicted_rollouts['terminal'] -
                                      episodes_summaries[i]['terminal'][-prediction_horizon:])
-                              < 1e-5).mean() / n_episodes
+                              < 1e-5)).mean() / n_episodes
     return dict(observations_mse=observations_mse,
                 rewards_mse=rewards_mse,
                 terminal_accuracy=terminal_accuracy)

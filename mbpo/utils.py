@@ -131,7 +131,7 @@ def interact(agent, environment, steps, config, training=True):
     return steps, episodes
 
 
-def make_env(name, episode_length, action_repeat):
+def make_env(name, episode_length, action_repeat, seed):
     env = gym.make(name)
     if not isinstance(env, gym.wrappers.TimeLimit):
         env = gym.wrappers.TimeLimit(env, max_episode_steps=episode_length)
@@ -140,6 +140,7 @@ def make_env(name, episode_length, action_repeat):
         env._max_episode_steps = episode_length
     env = ActionRepeat(env, action_repeat)
     env = RescaleAction(env, -1.0, 1.0)
+    env.seed(seed)
     #train_env = ObservationNormalize(env)
     #test_env = TestObservationNormalize(env, train_env.normalize)
     #return train_env, test_env

@@ -56,7 +56,7 @@ class ObservationNormalize(ObservationWrapper):
             (self.observation_space.high - self.observation_space.low) /
             (self.env.observation_space.high - self.env.observation_space.low) *
             (observation - self.env.observation_space.low) + self.observation_space.low,
-            (observation - self._mean) / (np.sqrt(self._m2 / (max(self._step - 1.0, 1.0))) + 1e-8)
+            (observation - self._mean) / (np.sqrt(self._m2 / (max(self._step - 1.0, 1.0))))
         ), -10.0, 10.0)
 
     def observation(self, observation):

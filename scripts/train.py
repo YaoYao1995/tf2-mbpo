@@ -42,7 +42,7 @@ def define_config():
         'episode_length': 1000,
         'training_steps_per_epoch': 10000,
         'evaluation_steps_per_epoch': 5000,
-        'log_dir': None,
+        'log_dir': 'runs',
         'render_episodes': 1,
         'debug_model': False,
         'cuda_device': '-1'
@@ -88,4 +88,6 @@ if __name__ == '__main__':
         parser.add_argument('--{}'.format(key), type=type(value) if value else str, default=value)
     config = parser.parse_args()
     os.environ['CUDA_VISIBLE_DEVICES'] = config.cuda_device
+    utils.dump_string(utils.pretty_print(config),
+                      os.path.join(config.log_dir, 'params.txt'))
     main(config)

@@ -173,3 +173,17 @@ def evaluate_model(episodes_summaries, agent):
     return dict(observations_mse=observations_mse,
                 rewards_mse=rewards_mse,
                 terminal_accuracy=terminal_accuracy)
+
+
+def pretty_print(config, indent=0):
+    summary = str()
+    align = 30 - indent * 2
+    for key, value in vars(config).items():
+        summary += '  ' * indent + '{:{align}}'.format(str(key), align=align)
+        summary += '{}\n'.format(str(value))
+    return summary
+
+
+def dump_string(string, filename):
+    with open(filename, 'w+') as file:
+        file.write(string)

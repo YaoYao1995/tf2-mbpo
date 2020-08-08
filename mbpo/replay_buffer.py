@@ -17,18 +17,15 @@ class ReplayBuffer(object):
         self._size = 0
         self._ptr = 0
 
-    def store(self, rollouts):
+    def store(self, transition):
         self._size = min(self._size + 1, self._buffer_capacity)
-        for k, v in rollouts.items():
-            self._buffers[k][self._ptr:self._ptr + 1, ...] = rollouts[k]
+        for k, v in transition.items():
+            self._buffers[k][self._ptr:self._ptr + 1, ...] = transition[k]
         self._ptr = (self._ptr + 1) % self._buffer_capacity
 
     def sample(self, batch_size, filter_goal_mets=False):
         indices = np.random.randint(0, self._size, batch_size)
-        out = dict()
-        for k, v in self._buffers.items():
-            samples = v[indices, ...]
-            out[k] = samples
+        out = {k: v[indices, ...] for k, v in self._buffers.items()}
         if filter_goal_mets:
             goal_mets = np.array(list(map(lambda info: info.get('goal_met', False), out['info'])))
             # We mask transitions with 'goal_met' since they are non-continuous, what extremely

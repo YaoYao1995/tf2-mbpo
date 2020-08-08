@@ -24,21 +24,21 @@ class MBPO(tf.Module):
             self._config.dynamics_layers,
             self._config.units, reward_layers=2, terminal_layers=2)
             for _ in range(self._config.ensemble_size)]
-        self._model_optimizer = AdamW(
+        self._model_optimizer = tf.keras.optimizers.Adam(
             learning_rate=self._config.model_learning_rate, clipnorm=self._config.grad_clip_norm,
-            epsilon=1e-5, weight_decay=self._config.weight_decay
+            epsilon=1e-5
         )
         self._warmup_policy = lambda: action_space.sample()
         self._actor = models.Actor(action_space.shape[0], 3, self._config.units)
-        self._actor_optimizer = AdamW(
+        self._actor_optimizer = tf.keras.optimizers.Adam(
             learning_rate=self._config.actor_learning_rate, clipnorm=self._config.grad_clip_norm,
-            epsilon=1e-5, weight_decay=self._config.weight_decay
+            epsilon=1e-5
         )
         self._critic = models.Critic(
             3, self._config.units, output_regularization=self._config.critic_regularization)
-        self._critic_optimizer = AdamW(
+        self._critic_optimizer = tf.keras.optimizers.Adam(
             learning_rate=self._config.critic_learning_rate, clipnorm=self._config.grad_clip_norm,
-            epsilon=1e-5, weight_decay=self._config.weight_decay
+            epsilon=1e-5
         )
 
     def update_model(self, batch):
@@ -214,6 +214,7 @@ class MBPO(tf.Module):
                 shape=(150, 8, action_dim),
                 mean=mu, stddev=sigma
             )
+        # TODO (yarden): average over particles!!!
             action_sequences = tf.clip_by_value(action_sequences, -1.0, 1.0)
             action_sequences_batch = action_sequences
             all_rewards = []

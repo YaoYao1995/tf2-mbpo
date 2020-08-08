@@ -139,9 +139,10 @@ def make_env(name, episode_length, action_repeat):
         env._max_episode_steps = episode_length
     env = ActionRepeat(env, action_repeat)
     env = RescaleAction(env, -1.0, 1.0)
-    train_env = ObservationNormalize(env)
-    test_env = TestObservationNormalize(env, train_env.normalize)
-    return train_env, test_env
+    #train_env = ObservationNormalize(env)
+    #test_env = TestObservationNormalize(env, train_env.normalize)
+    #return train_env, test_env
+    return env, env
 
 
 # Reading the errors produced by this function should assume all obsersvations are normalized to

@@ -22,7 +22,7 @@ class MBPO(tf.Module):
         self.ensemble = [models.WorldModel(
             observation_space.shape[0],
             self._config.dynamics_layers,
-            self._config.units, reward_layers=2, terminal_layers=2)
+            self._config.units, reward_layers=2, terminal_layers=2, min_stddev=0.0001)
             for _ in range(self._config.ensemble_size)]
         self._model_optimizer = tf.keras.optimizers.Adam(
             learning_rate=self._config.model_learning_rate, clipnorm=self._config.grad_clip_norm,

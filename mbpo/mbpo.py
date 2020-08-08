@@ -178,15 +178,18 @@ class MBPO(tf.Module):
         self._experience.store(transition)
 
     def __call__(self, observation, training=True):
+        scaled_obs = np.clip((observation - self._experience.obs_mean) / self._experience.obs_stddev,
+                             -10.0, 10.0)
         if training:
             if self.warm:
                 # action = self._actor(
                 #     np.expand_dims(observation, axis=0).astype(np.float32)).sample().numpy()
-                action = self.debug_actor(tf.constant(observation, dtype=tf.float32)).numpy()
+                action = self.debug_actor(tf.constant(scaled_obs, dtype=tf.float32)).numpy()
             else:
                 action = self._warmup_policy()
             if self.time_to_update and self.warm:
                 print("Updating world model, actor and critic.")
+                self._experience.update_statistics()
                 for _ in tqdm(range(self._config.update_steps), position=0, leave=True):
                     batch = self._experience.sample(self._config.batch_size,
                                                     filter_goal_mets=self._config.filter_goal_mets)
@@ -197,7 +200,7 @@ class MBPO(tf.Module):
         else:
             # action = self._actor(
             #     np.expand_dims(observation, axis=0).astype(np.float32)).mode().numpy()
-            action = self.debug_actor(tf.constant(observation, dtype=tf.float32)).numpy()
+            action = self.debug_actor(tf.constant(scaled_obs, dtype=tf.float32)).numpy()
         if self.time_to_log and training and self.warm:
             self._logger.log_metrics(self._training_step)
         return action

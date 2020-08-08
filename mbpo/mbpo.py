@@ -2,7 +2,6 @@ import random
 
 import numpy as np
 import tensorflow as tf
-from tensorflow_addons.optimizers import AdamW
 from tqdm import tqdm
 
 import mbpo.models as models
@@ -178,8 +177,9 @@ class MBPO(tf.Module):
         self._experience.store(transition)
 
     def __call__(self, observation, training=True):
-        scaled_obs = np.clip((observation - self._experience.obs_mean) / self._experience.obs_stddev,
-                             -10.0, 10.0)
+        scaled_obs = np.clip(
+            (observation - self._experience.obs_mean) / self._experience.obs_stddev,
+            -10.0, 10.0)
         if training:
             if self.warm:
                 # action = self._actor(
@@ -215,15 +215,16 @@ class MBPO(tf.Module):
         for _ in tf.range(10):
             action_sequences = tf.random.normal(
                 shape=(150, 8, action_dim),
-                mean=mu, stddev=sigma
+                mean=mu, stddev=sigma, seed=self._config.seed
             )
-        # TODO (yarden): average over particles!!!
+            # TODO (yarden): average over particles!!!
             action_sequences = tf.clip_by_value(action_sequences, -1.0, 1.0)
             action_sequences_batch = action_sequences
             all_rewards = []
             for model in self.ensemble:
                 trajectories = self.imagine_rollouts(
-                    tf.broadcast_to(observation, (action_sequences_batch.shape[0], observation.shape[0])),
+                    tf.broadcast_to(observation,
+                                    (action_sequences_batch.shape[0], observation.shape[0])),
                     model,
                     tf.transpose(action_sequences_batch, [1, 0, 2])
                 )
@@ -241,4 +242,6 @@ class MBPO(tf.Module):
             sigma = tf.sqrt(variance)
             if tf.less_equal(tf.reduce_mean(sigma), 0.1):
                 break
-        return tf.clip_by_value(best_so_far + tf.random.normal(best_so_far.shape, stddev=0.01), -1.0, 1.0)
+        return tf.clip_by_value(
+            best_so_far + tf.random.normal(best_so_far.shape, stddev=0.01, seed=self._config.seed),
+            -1.0, 1.0)

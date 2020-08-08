@@ -16,7 +16,7 @@ class ReplayBuffer(object):
         }
         self._size = 0
         self._ptr = 0
-        self.obs_mean = np.zeros((observation_dim,))
+        self.obs_mean = np.zeros((observation_dim,), dtype=np.float32)
         self.obs_stddev = np.ones_like(self.obs_mean)
 
     def update_statistics(self):

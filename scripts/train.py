@@ -56,8 +56,8 @@ def main(config):
     agent = MBPO(config, logger, train_env.observation_space, train_env.action_space)
     steps = 0
     random.seed(config.seed)
-    np.random.seed(config.seed)
     tf.random.set_seed(config.seed)
+    np.random.seed(config.seed)
     while steps < config.total_training_steps:
         print("Performing a training epoch.")
         training_steps, training_episodes_summaries = utils.interact(

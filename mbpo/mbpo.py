@@ -27,7 +27,7 @@ class MBPO(tf.Module):
             learning_rate=self._config.model_learning_rate, clipnorm=self._config.grad_clip_norm,
             epsilon=1e-5
         )
-        self._warmup_policy = lambda: action_space.sample()
+        self._warmup_policy = lambda: np.random.uniform(action_space.low, action_space.high)
         self._actor = models.Actor(action_space.shape[0], 3, self._config.units)
         self._actor_optimizer = tf.keras.optimizers.Adam(
             learning_rate=self._config.actor_learning_rate, clipnorm=self._config.grad_clip_norm,
@@ -215,7 +215,7 @@ class MBPO(tf.Module):
         for _ in tf.range(10):
             action_sequences = tf.random.normal(
                 shape=(150, 8, action_dim),
-                mean=mu, stddev=sigma, seed=self._config.seed
+                mean=mu, stddev=sigma
             )
             # TODO (yarden): average over particles!!!
             action_sequences = tf.clip_by_value(action_sequences, -1.0, 1.0)
@@ -243,5 +243,5 @@ class MBPO(tf.Module):
             if tf.less_equal(tf.reduce_mean(sigma), 0.1):
                 break
         return tf.clip_by_value(
-            best_so_far + tf.random.normal(best_so_far.shape, stddev=0.01, seed=self._config.seed),
+            best_so_far + tf.random.normal(best_so_far.shape, stddev=0.01),
             -1.0, 1.0)

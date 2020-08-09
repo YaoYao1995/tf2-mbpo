@@ -51,13 +51,13 @@ def define_config():
 
 def main(config):
     logger = utils.TrainingLogger(config)
+    random.seed(config.seed)
+    tf.random.set_seed(config.seed)
+    np.random.seed(config.seed)
     train_env, test_env = utils.make_env(config.environment, config.episode_length,
                                          config.action_repeat, config.seed)
     agent = MBPO(config, logger, train_env.observation_space, train_env.action_space)
     steps = 0
-    random.seed(config.seed)
-    tf.random.set_seed(config.seed)
-    np.random.seed(config.seed)
     while steps < config.total_training_steps:
         print("Performing a training epoch.")
         training_steps, training_episodes_summaries = utils.interact(

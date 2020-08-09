@@ -92,9 +92,19 @@ class MBPO(tf.Module):
             predictions = bootstrap(observation, action)
             # If the rollout is done, we stay at the terminal state, not overriding with a new,
             # possibly valid state.
-            observation = tf.where(done_rollout,
-                                   observation,
-                                   predictions['next_observation'].sample())
+            if tf.equal(k, 0):
+                tf.print("mean", predictions['next_observation'].mean()[0])
+                tf.print("stddev", predictions['next_observation'].stddev()[0])
+                tf.print("next obs", (predictions['next_observation'].mean() +
+                predictions['next_observation'].stddev() * tf.random.normal(tf.shape(observation), seed=self._config.seed))[0])
+                # tf.random.stateless_normal(tf.shape(observation),
+                                           # seed=(self._config.seed, self._config.seed * 2))[0]
+            observation = tf.where(
+                done_rollout,
+                observation,
+                predictions['next_observation'].mean() +
+                predictions['next_observation'].stddev() * tf.random.normal(tf.shape(observation), seed=self._config.seed))
+            # TODO (yarden): there is a bug in the sample above - it's not reproducable.
             rollouts['next_observation'] = rollouts['next_observation'].write(k, observation)
             terminal = tf.where(done_rollout,
                                 1.0,
@@ -217,10 +227,11 @@ class MBPO(tf.Module):
                 shape=(150, 8, action_dim),
                 mean=mu, stddev=sigma
             )
+            tf.print("actionsss", action_sequences[0])
             # TODO (yarden): average over particles!!!
             action_sequences = tf.clip_by_value(action_sequences, -1.0, 1.0)
             action_sequences_batch = action_sequences
-            all_rewards = []
+            scores = tf.zeros((150,), dtype=tf.float32)
             for model in self.ensemble:
                 trajectories = self.imagine_rollouts(
                     tf.broadcast_to(observation,
@@ -228,9 +239,9 @@ class MBPO(tf.Module):
                     model,
                     tf.transpose(action_sequences_batch, [1, 0, 2])
                 )
-                all_rewards.append(tf.reduce_sum(
-                    trajectories['reward'] * (1.0 - trajectories['terminal']), axis=1))
-            scores = tf.squeeze(tf.reduce_mean(tf.stack(all_rewards, axis=0), axis=0))
+                scores += tf.squeeze(tf.reduce_sum(
+                    trajectories['reward'] * (1.0 - trajectories['terminal']), axis=1) / self._config.ensemble_size)
+            tf.print("scoress", scores[0])
             elite_scores, elite = tf.nn.top_k(scores, 10, sorted=False)
             best_of_elite = tf.argmax(elite_scores)
             if tf.greater(elite_scores[best_of_elite], best_so_far_score):
@@ -243,5 +254,7 @@ class MBPO(tf.Module):
             if tf.less_equal(tf.reduce_mean(sigma), 0.1):
                 break
         return tf.clip_by_value(
-            best_so_far + tf.random.normal(best_so_far.shape, stddev=0.01),
+            best_so_far,
             -1.0, 1.0)
+
+#      + tf.random.normal(best_so_far.shape, stddev=0.01)
